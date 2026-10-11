@@ -41,7 +41,7 @@ function initializeLanguage(){
 }
 function localizedTime(value,relative=false){
  const date=new Date(typeof value==='number'?value*1000:value);
- if(!value||value==='0001-01-01T00:00:00Z'||!Number.isFinite(date.getTime()))return msg('ui.noObservationYet');
+ if(!value||value==='0001-01-01T00:00:00Z'||!Number.isFinite(date.getTime()))return msg('common.noObservationYet');
  return new LocalizedText(()=>{if(!relative)return date.toLocaleString(language,{timeZoneName:'short'});const seconds=Math.round((date-Date.now())/1000),amount=Math.abs(seconds),unit=amount<60?'second':amount<3600?'minute':amount<86400?'hour':'day',divisor={second:1,minute:60,hour:3600,day:86400}[unit];return new Intl.RelativeTimeFormat(language,{numeric:'auto'}).format(Math.round(seconds/divisor),unit);});
 }
 function validateTranslations(){

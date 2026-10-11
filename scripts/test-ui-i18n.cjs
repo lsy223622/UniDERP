@@ -15,18 +15,22 @@ test('manual preference persists and automatic mode responds to languagechange',
  env.run("setLanguage('en'); navigator.languages=['zh-CN']");env.listeners.languagechange();assert.equal(env.root.lang,'en');
 });
 test('changing language updates text and attributes without replacing controls or running actions',()=>{
- const env=environment(['en']);env.run("const input={value:'unsaved secret',disabled:true,isConnected:true,attrs:{},setAttribute(k,v){this.attrs[k]=v;}}; const label={textContent:'',isConnected:true}; setText(label,msg('ui.saveConfiguration')); setLocalizedAttribute(input,'aria-label',msg('ui.saveConfiguration')); let calls=0; window.fetch=()=>calls++;");
+ const env=environment(['en']);env.run("const input={value:'unsaved secret',disabled:true,isConnected:true,attrs:{},setAttribute(k,v){this.attrs[k]=v;}}; const label={textContent:'',isConnected:true}; setText(label,msg('settings.saveConfiguration')); setLocalizedAttribute(input,'aria-label',msg('settings.saveConfiguration')); let calls=0; window.fetch=()=>calls++;");
  env.run("setLanguage('zh-CN')");assert.equal(env.run('label.textContent'),'保存配置');assert.equal(env.run("input.attrs['aria-label']"),'保存配置');assert.equal(env.run('input.value'),'unsaved secret');assert.equal(env.run('input.disabled'),true);assert.equal(env.run('calls'),0);
  env.run("setText(label,msg('busy.saving')); setLanguage('en')");assert.equal(env.run('label.textContent'),'Saving…');
 });
 test('catalogs have matching interpolation and unknown keys fail validation',()=>{
  const env=environment(['en']);env.run("validateTranslations();");assert.throws(()=>env.run("msg('missing.translation').toString()"),/missing.translation/);
+ for(const file of ['app.js','i18n.js','index.html']){
+  const source=fs.readFileSync('internal/control/ui/'+file,'utf8');
+  for(const match of source.matchAll(/(?:msg\(['"]|data-i18n(?:-aria-label|-title)?=")([a-zA-Z]+\.[a-zA-Z0-9]+)['"]/g))assert.doesNotThrow(()=>env.run('String(msg('+JSON.stringify(match[1])+'))'),file+': '+match[1]);
+ }
 });
 
 test('nested messages, plurals and timestamps follow the selected language while raw data stays intact',()=>{
  const env=environment(['en']);
  assert.equal(env.run("String(msg('nodes.count',1))"),'1 node');assert.equal(env.run("String(msg('nodes.count',2))"),'2 nodes');
- env.run("const raw='tskey-client-raw-中文'; const value=joinText(raw,' · ',msg('ui.saveConfiguration')); const date=localizedTime('2026-10-11T01:00:00Z');");
+ env.run("const raw='tskey-client-raw-中文'; const value=joinText(raw,' · ',msg('settings.saveConfiguration')); const date=localizedTime('2026-10-11T01:00:00Z');");
  assert.equal(env.run('String(value)'),'tskey-client-raw-中文 · Save configuration');const english=env.run('String(date)');
  env.run("setLanguage('zh-CN')");assert.equal(env.run('String(value)'),'tskey-client-raw-中文 · 保存配置');assert.notEqual(env.run('String(date)'),english);assert.equal(env.run('String(localizedTime(0,true))'),'尚无观测');
 });
@@ -34,10 +38,10 @@ test('nested messages, plurals and timestamps follow the selected language while
 test('updating a label retains its input and the actual button handler submits only once during language changes',async()=>{
  const env=environment(['en']);
  env.run(`document.createElement=tag=>({nodeType:1,tagName:tag.toUpperCase(),isConnected:true,childNodes:[],handlers:{},prepend(node){this.childNodes.unshift(node);},addEventListener(event,handler){this.handlers[event]=handler;}});
- const control={value:'unsaved password',disabled:false};const label=document.createElement('label');setText(label,msg('ui.saveConfiguration'));label.childNodes.push(control);setLanguage('zh-CN');`);
+ const control={value:'unsaved password',disabled:false};const label=document.createElement('label');setText(label,msg('settings.saveConfiguration'));label.childNodes.push(control);setLanguage('zh-CN');`);
  assert.equal(env.run('label.childNodes[1]===control'),true);assert.equal(env.run('control.value'),'unsaved password');
  const app=fs.readFileSync('internal/control/ui/app.js','utf8');env.run(app.slice(0,app.indexOf('function page(')));
- env.run("let submits=0,finish;const testButton=button(msg('ui.saveConfiguration'),()=>{submits++;return new Promise(resolve=>finish=resolve);});const pending=testButton.handlers.click();setLanguage('en');");
+ env.run("let submits=0,finish;const testButton=button(msg('settings.saveConfiguration'),()=>{submits++;return new Promise(resolve=>finish=resolve);});const pending=testButton.handlers.click();setLanguage('en');");
  assert.equal(env.run('testButton.disabled'),true);assert.equal(env.run('String(getText(testButton))'),'Saving…');assert.equal(env.run('submits'),1);
  env.run("setLanguage('zh-CN')");assert.equal(env.run('String(getText(testButton))'),'正在保存…');env.run('finish()');await env.run('pending');
  assert.equal(env.run('testButton.disabled'),false);assert.equal(env.run('String(getText(testButton))'),'保存配置');assert.equal(env.run('submits'),1);
