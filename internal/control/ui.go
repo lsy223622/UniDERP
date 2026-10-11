@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-//go:embed ui/index.html ui/app.js ui/theme.js ui/app.css ui/fonts/InterVariable.woff2
+//go:embed ui/index.html ui/app.js ui/theme.js ui/i18n.js ui/locales/*.js ui/app.css ui/fonts/InterVariable.woff2
 var managementFiles embed.FS
 
 func serveManagement(w http.ResponseWriter, r *http.Request) bool {
@@ -17,6 +17,12 @@ func serveManagement(w http.ResponseWriter, r *http.Request) bool {
 		file, contentType = "ui/app.js", "text/javascript; charset=utf-8"
 	case "/manage/theme.js":
 		file, contentType = "ui/theme.js", "text/javascript; charset=utf-8"
+	case "/manage/i18n.js":
+		file, contentType = "ui/i18n.js", "text/javascript; charset=utf-8"
+	case "/manage/locales/zh-CN.js":
+		file, contentType = "ui/locales/zh-CN.js", "text/javascript; charset=utf-8"
+	case "/manage/locales/en.js":
+		file, contentType = "ui/locales/en.js", "text/javascript; charset=utf-8"
 	case "/manage/app.css":
 		file, contentType = "ui/app.css", "text/css; charset=utf-8"
 	case "/manage/fonts/InterVariable.woff2":

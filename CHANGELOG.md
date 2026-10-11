@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.0] - 2026-10-12
+
+- Adds complete Simplified Chinese and English Web console text, including
+  setup, login, role-specific pages, errors, busy states and localized dates.
+- Follows the browser language by default and remembers manual language choices.
+  Switching in place preserves inputs, open menus and ongoing operations;
+  copied commands, credentials and DERP maps keep their original contents.
+- Groups each language's resources by console feature and simplifies redundant
+  UI copy. CLI and daemon diagnostic text uses English.
+- Aligns appearance and language options in the account menu and releases
+  translation bindings when old pages and previews are removed.
+- Publishes Linux/amd64 images as ghcr.io/lsy223622/uniderp:2.1.0 and latest.
+
 ## [2.0.0] - 2026-10-08
 
 - Releases the single-controller v2 platform: independent administrator,

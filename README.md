@@ -6,16 +6,16 @@ UniDERP shares self-hosted Tailscale DERP relays across independent tailnets. On
 
 The controller also runs a local relay, subject to the same registration and authorization rules as members. Members hold their node identity, policy and independent local administrator account; Tailnet OAuth credentials and shared resource accounts stay on the controller. Tailscale continues to manage peer identity, network policy and WireGuard encryption.
 
-This release targets Linux/amd64. The Compose examples use `ghcr.io/lsy223622/uniderp:2.0.0`; prereleases do not move stable `latest`. Windows binaries are build-tested, but this release does not provide a Windows download package or an ARM64 image.
+This release targets Linux/amd64. The Compose examples use `ghcr.io/lsy223622/uniderp:2.1.0`; prereleases do not move stable `latest`. Windows binaries are build-tested, but this release does not provide a Windows download package or an ARM64 image.
 
 Isolated acceptance with published candidate images has exercised first-administrator Web setup, two independent real Tailnets with read-only OAuth and stock Tailscale applications, controller/member enrollment, confirmation-time admission, external/manual-certificate TLS forwarding, online revocation, scoped console workflows and actual DERP map clipboard/download contents. Complete stopped backups were restored with matching database, keys, node policy and certificates, then checked with fresh OAuth reads and stock relay connections. Real Let's Encrypt issuance and published-image cache reuse across restart were verified; renewal behavior was checked with controlled upstream tests rather than a near-expiry production renewal.
 
 Four ordinary clients transferred actual data over a forced WAN DERP path. With an 8 Mbps payload budget and 8:2 owner/shared weights, each RX/TX direction measured about 8 Mbps for shared traffic alone, 6.4/1.6 Mbps under contention, and 8 Mbps for shared traffic after the owner endpoints stopped. Application bytes were measured separately and had lower, variable throughput. These isolated observations do not establish a long-term WAN throughput or availability guarantee.
 
 ```sh
-docker pull ghcr.io/lsy223622/uniderp:2.0.0
+docker pull ghcr.io/lsy223622/uniderp:2.1.0
 docker run --rm --entrypoint /usr/local/bin/uniderp \
-  ghcr.io/lsy223622/uniderp:2.0.0 version
+  ghcr.io/lsy223622/uniderp:2.1.0 version
 ```
 
 Use the published image digest for immutable deployments. Source and CI are at [lsy223622/UniDERP](https://github.com/lsy223622/UniDERP); see [releases](https://github.com/lsy223622/UniDERP/releases) for version-specific results.
@@ -50,6 +50,8 @@ docker compose -f docker-compose.example.yaml up -d
 [config.example.yaml](config.example.yaml) enables the controller, using `/data/controller.sqlite`, `/data/controller.key` and `/data/node`. The image runs as UID/GID 10001, with a read-only root filesystem and a private `/run/uniderp` tmpfs. Keep `/data` writable by that UID; mount the whole directory so keys, SQLite WAL files and node state persist together. Admin and health listeners remain local.
 
 Open `https://YOUR-CONTROLLER-DOMAIN/manage/`. When no administrator is configured, the page asks you to choose the first administrator's username, password (12–72 bytes) and password confirmation, then signs you in. Later visits use the normal login page.
+
+The console supports Simplified Chinese and English. Language defaults to the browser preference; choose Auto, 简体中文 or English before login or from the account menu. The choice is remembered, and switching languages preserves unsaved inputs, open menus and ongoing operations. Copied commands and DERP maps keep their original contents.
 
 With no existing configuration, the daemon writes a bootstrap configuration and opens the management service before starting any relay or controller business. After creating the local administrator, choose **Configure as controller** or **Join an existing cluster**, save the public domain, listeners, public ports and TLS mode, then apply. A DERP node's Local node page accepts the controller HTTPS origin and one-time enrollment code. The controller administrator can register its built-in DERP node from Local node; this still proves the node key and public HTTPS domain and does not grant device access automatically. Explicit YAML configurations keep their existing role.
 
