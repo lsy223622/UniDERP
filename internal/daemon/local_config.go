@@ -117,7 +117,7 @@ func (d *Daemon) SaveSettings(ctx context.Context, settings control.LocalSetting
 	if client != nil {
 		_, node := client.PolicyBinding()
 		if node != "" && settings.Hostname != active.Server.Hostname {
-			return errors.New("已注册节点更改域名前，请先退出集群并在主控修改节点域名")
+			return errors.New("leave the cluster and update the node hostname on the controller before changing a registered node hostname")
 		}
 	}
 	cfg.SetupRequired = false
@@ -189,7 +189,7 @@ func (d *Daemon) applyLocalConfig(ctx context.Context, cfg config.Config) error 
 		return control.ErrConflict
 	}
 	if active.Storage != cfg.Storage || active.Server.Management != cfg.Server.Management || active.Server.Admin != cfg.Server.Admin || active.Server.Health != cfg.Server.Health || active.Node.StateDir != cfg.Node.StateDir {
-		return errors.New("部署路径与管理监听变更需要重启服务")
+		return errors.New("restart the service to change the deployment path or management listener")
 	}
 	if err := cfg.Validate(); err != nil {
 		return err
