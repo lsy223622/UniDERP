@@ -615,7 +615,7 @@ const messagesEn={
   "ui.theStateHasChangedRefreshAndTryAgain": "The state has changed. Refresh and try again.",
   "ui.youDoNotHavePermissionToPerformThisAction": "You do not have permission to perform this action.",
   "ui.signInAgain": "Sign in again.",
-  "ui.checkTheHighlightedFieldsAndTryAgain": "Check the highlighted fields and try again.",
+  "ui.checkTheHighlightedFieldsAndTryAgain": "Check the input fields and try again.",
   "ui.theCertificateDoesNotMatchTheSavedPublicDERP": "The certificate does not match the saved public DERP hostname.",
   "ui.theCertificateChainAndPrivateKeyDoNotMatch": "The certificate chain and private key do not match. Upload a valid PEM pair.",
   "ui.uploadTheCertificateChainAndPrivateKeyBeforeApplying": "Upload the certificate chain and private key before applying settings.",
