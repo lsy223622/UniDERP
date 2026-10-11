@@ -17,6 +17,12 @@ function joinText(...parts){return new LocalizedText(()=>parts.map(String).join(
 function localizedError(message){const error=new Error(String(message));error.localizedMessage=message;return error;}
 function errorText(error){return error.localizedMessage||error.message;}
 const textBindings=new Map(),attributeBindings=new Map();
+new MutationObserver(records=>{
+ for(const record of records)for(const removed of record.removedNodes){
+  const pending=[removed];
+  while(pending.length){const target=pending.pop();if(target.isConnected)continue;textBindings.delete(target);attributeBindings.delete(target);pending.push(...target.childNodes);}
+ }
+}).observe(document.documentElement,{childList:true,subtree:true});
 function setText(target,value){
  let binding=textBindings.get(target);
  if(!binding){let node=target;if(target.nodeType===1){node=[...target.childNodes].find(n=>n.nodeType===3&&n.textContent.trim());if(!node){node=document.createTextNode('');target.prepend(node);}}binding={node};textBindings.set(target,binding);}
