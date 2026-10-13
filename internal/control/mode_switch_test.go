@@ -112,6 +112,39 @@ func TestModeOfflineUnknownBlocks(t *testing.T) {
 	}
 }
 
+func TestModeRetiredBuiltinDoesNotBlockRestoredController(t *testing.T) {
+	s, admin, builtin, _, _, _ := modeRevocationFixture(t)
+	if _, err := s.db.Exec("UPDATE node_permission_history SET expiry_known=0 WHERE node_id=?", builtin.ID); err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.BeginModeSwitch(t.Context(), admin, ModeSwitchRequest{ID: randomToken(), From: "controller", Target: "member", BuiltinNodeID: builtin.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishModeSwitch(t.Context(), admin, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetireModeBuiltin(t.Context(), admin, first.ID, builtin.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CompleteModeSwitch(t.Context(), admin, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.BeginModeSwitch(t.Context(), admin, ModeSwitchRequest{ID: randomToken(), From: "controller", Target: "member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Nodes) != 1 || !second.Nodes[0].ExpiryKnown || !second.Nodes[0].EffectiveUntil.IsZero() {
+		t.Fatal("stopped local relay lost its completion evidence after restoration", second)
+	}
+	if _, err := s.ModeSwitch(t.Context(), admin); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishModeSwitch(t.Context(), admin, second.ID); err != nil {
+		t.Fatal("restored stopped builtin blocks next switch", err)
+	}
+}
+
 func TestModeHistoricalExpiryCannotUseLatestOnly(t *testing.T) {
 	s, admin, node, _, _, old := modeRevocationFixture(t)
 	historical := cluster.EffectiveUntil(old.Grants[0], old.Grants[0].Keys[0])

@@ -320,19 +320,16 @@ func TestModeSwitchCancelDoesNotRestoreGrants(t *testing.T) {
 	}
 }
 
-type failedModeProcess struct{ daemonFakeProcess }
-
-func (*failedModeProcess) Start(context.Context, config.ServerConfig, string, string) error {
-	return errors.New("mode activation test failure")
-}
-
 func TestModeSwitchActivationFailureKeepsAdminAccess(t *testing.T) {
 	d, actor := modeTestDaemon(t, config.ModeController)
 	d.stopNodeControl()
 	if err := d.stopRelay(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	d.derper = &failedModeProcess{}
+	process := d.derper.(*daemonFakeProcess)
+	process.mu.Lock()
+	process.startErr = errors.New("mode activation test failure")
+	process.mu.Unlock()
 	if _, err := d.SwitchMode(t.Context(), actor, "member", "", 0); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +344,9 @@ func TestModeSwitchActivationFailureKeepsAdminAccess(t *testing.T) {
 	if _, err := os.Stat(d.modeJournalPath()); err != nil {
 		t.Fatal("failed activation journal missing", err)
 	}
-	d.derper = &daemonFakeProcess{}
+	process.mu.Lock()
+	process.startErr = nil
+	process.mu.Unlock()
 	if _, err := d.SwitchMode(t.Context(), actor, "member", "", status.Revision); err != nil {
 		t.Fatal("activation retry failed", err)
 	}

@@ -364,6 +364,9 @@ func (s *Store) RetireModeBuiltin(ctx context.Context, actor Actor, id, builtin 
 	if err := s.releaseNode(ctx, tx, builtin); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, "UPDATE node_permission_history SET expiry_known=1,effective_until=0 WHERE node_id=?", builtin); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

@@ -209,6 +209,7 @@ type daemonFakeProcess struct {
 	done        chan struct{}
 	exitErrs    map[<-chan struct{}]error
 	starts      int
+	startErr    error
 	stopEntered chan struct{}
 	stopRelease chan struct{}
 }
@@ -216,6 +217,9 @@ type daemonFakeProcess struct {
 func (p *daemonFakeProcess) Start(context.Context, config.ServerConfig, string, string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.startErr != nil {
+		return p.startErr
+	}
 	if p.running {
 		return errors.New("fake derper already running")
 	}
