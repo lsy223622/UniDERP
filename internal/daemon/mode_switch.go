@@ -241,7 +241,7 @@ func (d *Daemon) prepareModeRevocation(ctx context.Context) error {
 	if op == nil || !d.modeBusy.Load() || !op.Base.Controller.Enabled {
 		return nil
 	}
-	if err := d.controllerStore.EnableIdentity(op.Base.Controller.KeyFile); err != nil {
+	if err := d.controllerStore.ConfigureNodes(op.Base.Controller.AllowedNodeCIDRs); err != nil {
 		return err
 	}
 	status, err := d.controllerStore.BeginModeSwitch(ctx, op.Actor, control.ModeSwitchRequest{ID: op.Status.ID, From: op.Status.From, Target: op.Status.Target, BuiltinNodeID: op.BuiltinNodeID})
@@ -254,7 +254,7 @@ func (d *Daemon) prepareModeRevocation(ctx context.Context) error {
 		d.modeBusy.Store(false)
 		return d.writeModeJournal()
 	}
-	return nil
+	return d.controllerStore.EnableIdentity(op.Base.Controller.KeyFile)
 }
 
 func (d *Daemon) startModeWorker(ctx context.Context) {

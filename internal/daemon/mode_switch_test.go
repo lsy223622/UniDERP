@@ -459,6 +459,19 @@ func TestModeSwitchFreezesBeforeStartReturns(t *testing.T) {
 	}
 }
 
+func TestModeSwitchPreparationFailureKeepsAuthorizationFrozen(t *testing.T) {
+	d, actor := modeTestDaemon(t, config.ModeController)
+	if err := os.WriteFile(d.activeConfig().Controller.KeyFile, []byte("corrupt-key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SwitchMode(t.Context(), actor, "member", "", 0); err == nil {
+		t.Fatal("invalid controller key did not fail preparation")
+	}
+	if _, _, err := d.controllerStore.CreateNode(t.Context(), actor, "Late", "late.example.com", 443, 3478); !errors.Is(err, control.ErrModeSwitch) {
+		t.Fatal("preparation failure left controller authorization unfrozen", err)
+	}
+}
+
 func TestModeSwitchRejectsUnownedStorageBeforeRevocation(t *testing.T) {
 	d, actor := modeTestDaemon(t, config.ModeController)
 	node, _, err := d.controllerStore.CreateNode(t.Context(), actor, "Remote", "remote.example.com", 443, 3478)
