@@ -9,6 +9,7 @@ import (
 )
 
 type LocalSettings struct {
+	Mode         string `json:"mode"`
 	Role         string `json:"role"`
 	Hostname     string `json:"hostname"`
 	DERPListen   string `json:"derp_listen"`
@@ -22,6 +23,7 @@ type LocalSettings struct {
 }
 
 type LocalStatus struct {
+	Mode               string                `json:"mode"`
 	Certificate        CertificateStatus     `json:"certificate"`
 	Role               string                `json:"role"`
 	Joined             bool                  `json:"joined"`

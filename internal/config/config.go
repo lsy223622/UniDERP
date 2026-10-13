@@ -23,6 +23,14 @@ import (
 
 const CurrentVersion = 2
 
+type RunMode string
+
+const (
+	ModeStandalone RunMode = "standalone"
+	ModeController RunMode = "controller"
+	ModeMember     RunMode = "member"
+)
+
 const (
 	DefaultDERPListen   = ":3377"
 	DefaultSTUNListen   = ":3478"
@@ -35,6 +43,7 @@ const (
 )
 
 type Config struct {
+	Mode          RunMode           `yaml:"mode,omitempty"`
 	SetupRequired bool              `yaml:"setup_required,omitempty"`
 	Controller    *ControllerConfig `yaml:"controller"`
 	Node          NodeConfig        `yaml:"node"`
@@ -107,6 +116,16 @@ func Default() Config {
 	return c
 }
 
+func (c Config) EffectiveMode() RunMode {
+	if c.Mode != "" {
+		return c.Mode
+	}
+	if c.Controller == nil || c.Controller.Enabled {
+		return ModeController
+	}
+	return ModeMember
+}
+
 func (c *Config) Normalize() {
 	if c.Version == 0 {
 		c.Version = CurrentVersion
@@ -133,7 +152,7 @@ func (c *Config) Normalize() {
 		c.Storage.StateDir = DefaultStateDir
 	}
 	if c.Controller == nil {
-		c.Controller = &ControllerConfig{Enabled: true}
+		c.Controller = &ControllerConfig{Enabled: c.Mode != ModeMember}
 	}
 	if c.Controller.Enabled {
 		if c.Controller.Listen == "" {
@@ -301,6 +320,13 @@ func CreateFileIfMissing(path string, data []byte) (bool, error) {
 }
 
 func (c Config) Validate() error {
+	mode := c.EffectiveMode()
+	if mode != ModeStandalone && mode != ModeController && mode != ModeMember {
+		return errors.New("invalid instance mode")
+	}
+	if c.Controller != nil && c.Controller.Enabled != (mode != ModeMember) {
+		return errors.New("instance mode conflicts with controller.enabled")
+	}
 	if c.Version != CurrentVersion {
 		return fmt.Errorf("unsupported config version %d; expected %d", c.Version, CurrentVersion)
 	}
@@ -426,7 +452,7 @@ func (c Config) Validate() error {
 func RestartOnlyChanged(oldConfig, newConfig Config) bool {
 	oldConfig.Normalize()
 	newConfig.Normalize()
-	return oldConfig.Server.Hostname != newConfig.Server.Hostname ||
+	return oldConfig.EffectiveMode() != newConfig.EffectiveMode() || oldConfig.Server.Hostname != newConfig.Server.Hostname ||
 		oldConfig.SetupRequired != newConfig.SetupRequired || oldConfig.Server.Management != newConfig.Server.Management ||
 		!reflect.DeepEqual(oldConfig.Server.DERP, newConfig.Server.DERP) ||
 		oldConfig.Server.Admin.Socket != newConfig.Server.Admin.Socket ||
@@ -558,6 +584,7 @@ type schemaNode struct {
 
 var (
 	rootSchema = &schemaNode{Fields: map[string]*schemaNode{
+		"mode":           nil,
 		"setup_required": nil,
 		"version":        nil,
 		"server":         serverSchema,

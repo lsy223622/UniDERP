@@ -29,14 +29,18 @@ func configRole(cfg config.Config) string {
 func (d *Daemon) Role() string { return configRole(d.activeConfig()) }
 
 func localSettings(cfg config.Config) control.LocalSettings {
-	return control.LocalSettings{Role: configRole(cfg), Hostname: cfg.Server.Hostname, DERPListen: cfg.Server.DERP.Listen, STUNListen: cfg.Server.DERP.STUNListen, TLSMode: cfg.Server.DERP.TLSMode, CertMode: cfg.Server.DERP.CertMode, DERPPort: cfg.Node.DERPPort, STUNPort: cfg.Node.STUNPort, MaxBudgetBPS: cfg.Node.MaxBudgetBPS, LoggingLevel: cfg.Logging.Level}
+	mode := string(cfg.EffectiveMode())
+	if cfg.SetupRequired {
+		mode = ""
+	}
+	return control.LocalSettings{Mode: mode, Role: configRole(cfg), Hostname: cfg.Server.Hostname, DERPListen: cfg.Server.DERP.Listen, STUNListen: cfg.Server.DERP.STUNListen, TLSMode: cfg.Server.DERP.TLSMode, CertMode: cfg.Server.DERP.CertMode, DERPPort: cfg.Node.DERPPort, STUNPort: cfg.Node.STUNPort, MaxBudgetBPS: cfg.Node.MaxBudgetBPS, LoggingLevel: cfg.Logging.Level}
 }
 
 func (d *Daemon) Status(ctx context.Context) (control.LocalStatus, error) {
 	d.mu.RLock()
 	active, saved := d.current.Clone(), d.desired.Clone()
 	client, policy := d.nodeClient, d.policyClient
-	status := control.LocalStatus{Role: configRole(active), Saved: localSettings(saved), Active: localSettings(active), PendingApply: d.pendingRestart, ApplyError: d.applyError}
+	status := control.LocalStatus{Mode: string(active.EffectiveMode()), Role: configRole(active), Saved: localSettings(saved), Active: localSettings(active), PendingApply: d.pendingRestart, ApplyError: d.applyError}
 	childOK := d.childOK
 	d.mu.RUnlock()
 	status.Certificate = manualCertificateStatus(saved)
@@ -105,10 +109,24 @@ func (d *Daemon) SaveSettings(ctx context.Context, settings control.LocalSetting
 	if config.ValidateHostname(settings.Hostname) != nil {
 		return &control.InputError{Code: "invalid_hostname", Field: "hostname"}
 	}
-	if settings.Role != "controller" && settings.Role != "member" {
+	mode := config.RunMode(settings.Mode)
+	if mode == "" {
+		mode = active.EffectiveMode()
+		if active.SetupRequired {
+			mode = config.RunMode(settings.Role)
+		}
+	}
+	role := "controller"
+	if mode == config.ModeMember {
+		role = "member"
+	}
+	if mode != config.ModeController && mode != config.ModeStandalone && mode != config.ModeMember {
 		return control.ErrInvalid
 	}
-	if !active.SetupRequired && settings.Role != configRole(active) {
+	if settings.Role != "" && settings.Role != role {
+		return control.ErrInvalid
+	}
+	if !active.SetupRequired && (role != configRole(active) || mode != active.EffectiveMode()) {
 		return control.ErrConflict
 	}
 	d.mu.RLock()
@@ -121,7 +139,8 @@ func (d *Daemon) SaveSettings(ctx context.Context, settings control.LocalSetting
 		}
 	}
 	cfg.SetupRequired = false
-	if settings.Role == "member" {
+	cfg.Mode = mode
+	if role == "member" {
 		cfg.Controller = &config.ControllerConfig{Enabled: false}
 	} else {
 		if !cfg.Controller.Enabled {
@@ -185,7 +204,7 @@ func (d *Daemon) applyLocalConfig(ctx context.Context, cfg config.Config) error 
 		return err
 	}
 	active := d.activeConfig()
-	if !active.SetupRequired && configRole(active) != configRole(cfg) {
+	if !active.SetupRequired && (configRole(active) != configRole(cfg) || active.EffectiveMode() != cfg.EffectiveMode()) {
 		return control.ErrConflict
 	}
 	if active.Storage != cfg.Storage || active.Server.Management != cfg.Server.Management || active.Server.Admin != cfg.Server.Admin || active.Server.Health != cfg.Server.Health || active.Node.StateDir != cfg.Node.StateDir {

@@ -418,6 +418,12 @@ func (d *Daemon) commitConfig(ctx context.Context, cfg config.Config, warnings [
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	d.mu.RLock()
+	started, active := d.started, d.current.Clone()
+	d.mu.RUnlock()
+	if started && !active.SetupRequired && cfg.EffectiveMode() != active.EffectiveMode() {
+		return control.ErrConflict
+	}
 	if err := config.WriteAtomic(d.configPath, cfg); err != nil {
 		return err
 	}
@@ -432,6 +438,7 @@ func (d *Daemon) applyCommittedConfig(ctx context.Context, cfg config.Config, wa
 	runtime := cfg.Clone()
 	if started {
 		runtime.Server = active.Server
+		runtime.Mode = active.Mode
 		runtime.Storage = active.Storage
 		runtime.Controller = active.Controller
 		runtime.Node = active.Node
