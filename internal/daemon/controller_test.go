@@ -19,6 +19,8 @@ import (
 func TestControllerLocalAdminAndLifecycle(t *testing.T) {
 	dir := shortTempDir(t)
 	cfg := config.Default()
+	cfg.Storage.StateDir = dir
+	cfg.Node.StateDir = filepath.Join(dir, "node")
 	cfg.Server.Admin.Socket = filepath.Join(dir, "run", "admin.sock")
 	cfg.Server.Health.Listen = freeLoopbackAddress(t)
 	cfg.Controller.Listen = freeLoopbackAddress(t)
