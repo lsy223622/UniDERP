@@ -141,6 +141,9 @@ func (s *Store) RefreshIdentity(ctx context.Context, id string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := checkModeMutation(ctx, tx); err != nil {
+		return err
+	}
 	var encrypted []byte
 	var apiID string
 	var revision, seq int64
@@ -165,6 +168,9 @@ func (s *Store) RefreshIdentity(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback()
 	var currentRevision, currentSeq int64
+	if err := checkModeMutation(ctx, tx); err != nil {
+		return err
+	}
 	if err := tx.QueryRowContext(ctx, "SELECT revision,refresh_seq FROM credentials WHERE tailnet_id=?", id).Scan(&currentRevision, &currentSeq); err != nil {
 		return err
 	}

@@ -148,6 +148,9 @@ func (s *Store) CreateNode(ctx context.Context, actor Actor, name, domain string
 	if _, err := tx.ExecContext(ctx, "INSERT INTO nodes(id,owner_id,domain,derp_port,stun_port,display_name,region_id) VALUES(?,?,?,?,?,?,?)", n.ID, n.OwnerID, n.Domain, n.DERPPort, n.STUNPort, n.DisplayName, n.RegionID); err != nil {
 		return Node{}, Enrollment{}, conflictError(err)
 	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO node_permission_history(node_id,domain,display_name,expiry_known) VALUES(?,?,?,1)", n.ID, n.Domain, n.DisplayName); err != nil {
+		return Node{}, Enrollment{}, err
+	}
 	e, err := s.issueEnrollment(ctx, tx, n)
 	if err != nil {
 		return Node{}, Enrollment{}, err
@@ -206,6 +209,11 @@ func validNodeInstance(instance string) bool {
 }
 
 func (s *Store) newNodeChallenge(ctx context.Context, tx *sql.Tx, purpose, id, domain string, pub []byte, instance string) (cluster.NodeChallenge, error) {
+	if purpose == "enroll" {
+		if err := checkModeMutation(ctx, tx); err != nil {
+			return cluster.NodeChallenge{}, err
+		}
+	}
 	c := cluster.NodeChallenge{Purpose: purpose, ClusterID: s.clusterID, NodeID: id, Domain: domain, PublicKey: pub, InstanceID: instance, Nonce: randomToken(), ExpiresAt: s.now().Add(2 * time.Minute).UTC().Truncate(time.Second)}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM node_challenges WHERE node_id=? AND (expires_at<=? OR used_at!=0)", id, s.now().Unix()); err != nil {
 		return cluster.NodeChallenge{}, err
@@ -242,6 +250,11 @@ func (s *Store) EnrollmentChallenge(ctx context.Context, code string, pub []byte
 }
 
 func (s *Store) checkNodeChallenge(ctx context.Context, tx *sql.Tx, c cluster.NodeChallenge, sig []byte, purpose string) error {
+	if purpose == "enroll" {
+		if err := checkModeMutation(ctx, tx); err != nil {
+			return err
+		}
+	}
 	if c.ClusterID != s.clusterID || c.Purpose != purpose || len(c.PublicKey) != ed25519.PublicKeySize || len(sig) != ed25519.SignatureSize || len(c.Nonce) != 64 || !s.now().Before(c.ExpiresAt) {
 		return ErrUnauthorized
 	}

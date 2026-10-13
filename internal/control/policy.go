@@ -215,6 +215,9 @@ func (s *Store) buildPolicy(ctx context.Context, tx *sql.Tx, id string, now time
 			return cluster.Policy{}, err
 		}
 		if bytes.Equal(candidate, previous) {
+			if err := recordPermissionHorizon(ctx, tx, old); err != nil {
+				return cluster.Policy{}, err
+			}
 			return old, nil
 		}
 		if now.Before(old.GeneratedAt) {
@@ -231,6 +234,9 @@ func (s *Store) buildPolicy(ctx context.Context, tx *sql.Tx, id string, now time
 		return cluster.Policy{}, ErrInvalid
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE node_policies SET desired_revision=?,generated_at=?,policy_json=? WHERE node_id=?", p.Revision, p.GeneratedAt.Unix(), body, id); err != nil {
+		return cluster.Policy{}, err
+	}
+	if err := recordPermissionHorizon(ctx, tx, p); err != nil {
 		return cluster.Policy{}, err
 	}
 	return p, nil
@@ -251,8 +257,14 @@ func (s *Store) NodeHeartbeat(ctx context.Context, token string, report *cluster
 	if _, err := tx.ExecContext(ctx, "UPDATE nodes SET lease_until=?,last_heartbeat=? WHERE id=?", lease.Unix(), now.Unix(), session.NodeID); err != nil {
 		return cluster.NodeHeartbeat{}, err
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE grants SET last_control_success=? WHERE node_id=? AND state='active'", now.Unix(), session.NodeID); err != nil {
+	frozen, err := modeSwitchFrozen(ctx, tx)
+	if err != nil {
 		return cluster.NodeHeartbeat{}, err
+	}
+	if !frozen {
+		if _, err := tx.ExecContext(ctx, "UPDATE grants SET last_control_success=? WHERE node_id=? AND state='active'", now.Unix(), session.NodeID); err != nil {
+			return cluster.NodeHeartbeat{}, err
+		}
 	}
 	p, err := s.buildPolicy(ctx, tx, session.NodeID, now)
 	if err != nil {

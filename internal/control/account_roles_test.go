@@ -110,7 +110,7 @@ INSERT INTO tailnets(id,owner_id,display_name) VALUES('tailnet',?,'Tailnet');`, 
 CREATE TABLE legacy_users(id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE COLLATE NOCASE,role TEXT NOT NULL CHECK(role IN ('admin','member')),enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),password_hash BLOB NOT NULL,session_version INTEGER NOT NULL DEFAULT 1);
 INSERT INTO legacy_users SELECT * FROM users;
 DROP TABLE users; ALTER TABLE legacy_users RENAME TO users;
-PRAGMA user_version=6;PRAGMA foreign_keys=ON;`)
+DROP TABLE node_permission_history; DROP TABLE mode_operations; PRAGMA user_version=6;PRAGMA foreign_keys=ON;`)
 	if err != nil {
 		t.Fatal(err)
 	}

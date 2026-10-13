@@ -337,5 +337,8 @@ func (s *Store) AcknowledgePolicy(ctx context.Context, token string, ack cluster
 			return err
 		}
 	}
+	if err := acknowledgeModeRevocation(ctx, tx, session.NodeID, ack, body); err != nil {
+		return err
+	}
 	return tx.Commit()
 }

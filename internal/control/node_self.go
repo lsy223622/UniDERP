@@ -11,6 +11,9 @@ func (s *Store) SetNodeSessionPorts(ctx context.Context, token string, derpPort,
 		return err
 	}
 	defer tx.Rollback()
+	if err := checkModeMutation(ctx, tx); err != nil {
+		return err
+	}
 	session, err := s.nodeSession(ctx, tx, token)
 	if err != nil {
 		return err
@@ -66,6 +69,9 @@ func (s *Store) ReleaseNode(ctx context.Context, token string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := checkModeMutation(ctx, tx); err != nil {
+		return err
+	}
 	session, err := s.nodeSession(ctx, tx, token)
 	if err != nil {
 		return err

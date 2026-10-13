@@ -7,10 +7,10 @@ func (s *Store) migrate() (err error) {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version == 7 {
+	if version == 8 {
 		return nil
 	}
-	if version < 0 || version > 7 {
+	if version < 0 || version > 8 {
 		return fmt.Errorf("unsupported controller database version %d", version)
 	}
 	if _, err := s.db.Exec("PRAGMA foreign_keys=OFF"); err != nil {
@@ -145,7 +145,7 @@ PRAGMA user_version=6;`); err != nil {
 			return err
 		}
 	}
-	if version > 0 {
+	if version > 0 && version < 7 {
 		if _, err := tx.Exec(`CREATE TABLE users_new (
  id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE,
  role TEXT NOT NULL CHECK(role IN ('admin','provider','member')), enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
@@ -170,7 +170,15 @@ ALTER TABLE users_new RENAME TO users;`); err != nil {
 	if broken {
 		return fmt.Errorf("controller migration has invalid resource ownership")
 	}
-	if _, err := tx.Exec("PRAGMA user_version=7"); err != nil {
+	if _, err := tx.Exec(`CREATE TABLE node_permission_history (
+ node_id TEXT PRIMARY KEY, domain TEXT NOT NULL DEFAULT '', display_name TEXT NOT NULL DEFAULT '',
+ expiry_known INTEGER NOT NULL DEFAULT 0 CHECK(expiry_known IN (0,1)), effective_until INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO node_permission_history(node_id,domain,display_name) SELECT id,domain,display_name FROM nodes;
+INSERT OR IGNORE INTO node_permission_history(node_id) SELECT DISTINCT a.resource_id FROM audit a WHERE a.resource_type='node' AND a.action='node.delete' AND EXISTS(SELECT 1 FROM audit b WHERE b.resource_id=a.resource_id AND b.action='node.enroll');
+CREATE TABLE mode_operations(id TEXT PRIMARY KEY,state_json BLOB NOT NULL,active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)));
+CREATE UNIQUE INDEX mode_operation_active ON mode_operations(active) WHERE active=1;
+PRAGMA user_version=8;`); err != nil {
 		return err
 	}
 	return tx.Commit()

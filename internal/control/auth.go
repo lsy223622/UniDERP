@@ -57,6 +57,13 @@ func writeAudit(ctx context.Context, tx *sql.Tx, actorID, ownerID, kind, id, act
 }
 
 func activeActor(ctx context.Context, tx *sql.Tx, actor Actor) error {
+	if err := checkModeMutation(ctx, tx); err != nil {
+		return err
+	}
+	return authorizeActor(ctx, tx, actor)
+}
+
+func authorizeActor(ctx context.Context, tx *sql.Tx, actor Actor) error {
 	if actor.ID == "local" {
 		return nil
 	}
