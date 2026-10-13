@@ -54,6 +54,14 @@ func TestWebLeaveOfflineStopsRelayBeforeReturning(t *testing.T) {
 }
 
 func TestWebRegisterLocalReplacesRejectedPendingCode(t *testing.T) {
+	testRegisterLocalPendingCode(t, false)
+}
+
+func TestStandaloneInitialApplyRegistersOnce(t *testing.T) {
+	testRegisterLocalPendingCode(t, true)
+}
+
+func testRegisterLocalPendingCode(t *testing.T, automatic bool) {
 	d := localTestDaemon(t, false)
 	d.derper = &daemonFakeProcess{}
 	actor, err := d.controllerStore.InitializeAdmin(t.Context(), "localadmin", "long-password-123")
@@ -128,7 +136,22 @@ func TestWebRegisterLocalReplacesRejectedPendingCode(t *testing.T) {
 	if _, err := d.RegisterLocal(t.Context(), control.Actor{Role: "member"}, "Local relay"); !errors.Is(err, control.ErrForbidden) {
 		t.Fatal(err)
 	}
-	registered, err := d.RegisterLocal(t.Context(), actor, "Local relay")
+	var registered control.Node
+	if automatic {
+		cfg.Mode = config.ModeStandalone
+		cfg.Node.ControllerURL = ""
+		d.current.SetupRequired = true
+		if err := d.saveLocalConfig(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.ApplySettings(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		_, id := d.nodeClient.PolicyBinding()
+		registered, err = d.controllerStore.Node(t.Context(), actor, id)
+	} else {
+		registered, err = d.RegisterLocal(t.Context(), actor, "Local relay")
+	}
 	if err != nil || registered.ID != node.ID || freshCode == "" || freshCode == oldCode {
 		t.Fatal(registered, err)
 	}

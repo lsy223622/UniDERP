@@ -15,6 +15,34 @@ func (s *Store) LocalAdministrator(ctx context.Context) (Actor, error) {
 	return actor, err
 }
 
+func (s *Store) AdoptModeAdministrator(ctx context.Context, source *Store, actorID string) error {
+	var username string
+	var hash []byte
+	if err := source.db.QueryRowContext(ctx, "SELECT username,password_hash FROM users WHERE id=? AND role='admin' AND enabled=1", actorID).Scan(&username, &hash); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, "UPDATE users SET username=?,password_hash=?,enabled=1,session_version=session_version+1 WHERE id=? AND role='admin'", username, hash, actorID)
+	if err != nil {
+		return conflictError(err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrConflict
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) ValidateLocalAdminDestination(ctx context.Context, destination string) error {
 	abs, err := filepath.Abs(destination)
 	if err != nil {

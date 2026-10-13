@@ -40,6 +40,9 @@ func (d *Daemon) prepareNodePolicy(cfg config.NodeConfig) error {
 }
 
 func (d *Daemon) startNodeControl(ctx context.Context) {
+	if d.nodeCancel != nil {
+		return
+	}
 	ctx, d.nodeCancel = context.WithCancel(ctx)
 	done := make(chan struct{})
 	d.nodeDone = done

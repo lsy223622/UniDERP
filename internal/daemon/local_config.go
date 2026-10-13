@@ -40,7 +40,7 @@ func (d *Daemon) Status(ctx context.Context) (control.LocalStatus, error) {
 	d.mu.RLock()
 	active, saved := d.current.Clone(), d.desired.Clone()
 	client, policy := d.nodeClient, d.policyClient
-	status := control.LocalStatus{Mode: string(active.EffectiveMode()), Role: configRole(active), Saved: localSettings(saved), Active: localSettings(active), PendingApply: d.pendingRestart, ApplyError: d.applyError}
+	status := control.LocalStatus{RegistrationError: d.registrationError, Mode: string(active.EffectiveMode()), Role: configRole(active), Saved: localSettings(saved), Active: localSettings(active), PendingApply: d.pendingRestart, ApplyError: d.applyError}
 	childOK := d.childOK
 	d.mu.RUnlock()
 	status.Certificate = manualCertificateStatus(saved)
@@ -259,6 +259,9 @@ func (d *Daemon) applyLocalConfig(ctx context.Context, cfg config.Config) error 
 	}
 	if err := d.writeModeJournal(); err != nil {
 		return err
+	}
+	if cfg.EffectiveMode() == config.ModeStandalone {
+		d.prepareStandalone(ctx)
 	}
 	if d.nodeClient != nil && d.derper.Running() {
 		d.startNodeControl(d.runCtx)

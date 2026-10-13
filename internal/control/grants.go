@@ -87,14 +87,6 @@ func grantResourcesEnabled(ctx context.Context, tx *sql.Tx, node, tailnet string
 }
 
 func (s *Store) RequestGrant(ctx context.Context, actor Actor, node, tailnet string, expected uint64, until time.Time) (Grant, error) {
-	if expected >= math.MaxInt64 || (!until.IsZero() && !s.now().Before(until.Truncate(time.Second))) {
-		return Grant{}, ErrInvalid
-	}
-	var untilUnix int64
-	if !until.IsZero() {
-		until = until.UTC().Truncate(time.Second)
-		untilUnix = until.Unix()
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Grant{}, err
@@ -102,6 +94,26 @@ func (s *Store) RequestGrant(ctx context.Context, actor Actor, node, tailnet str
 	defer tx.Rollback()
 	if err := activeActor(ctx, tx, actor); err != nil {
 		return Grant{}, err
+	}
+	g, err := s.requestGrant(ctx, tx, actor, node, tailnet, expected, until)
+	if err != nil {
+		return Grant{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Grant{}, err
+	}
+	s.notifyPolicy(node)
+	return g, nil
+}
+
+func (s *Store) requestGrant(ctx context.Context, tx *sql.Tx, actor Actor, node, tailnet string, expected uint64, until time.Time) (Grant, error) {
+	if expected >= math.MaxInt64 || (!until.IsZero() && !s.now().Before(until.Truncate(time.Second))) {
+		return Grant{}, ErrInvalid
+	}
+	var untilUnix int64
+	if !until.IsZero() {
+		until = until.UTC().Truncate(time.Second)
+		untilUnix = until.Unix()
 	}
 	var nodeOwner, tailnetOwner, nodeName, tailnetName, applicant string
 	if err := tx.QueryRowContext(ctx, "SELECT n.owner_id,t.owner_id,n.display_name,t.display_name,(SELECT username FROM users WHERE id=t.owner_id) FROM nodes n JOIN tailnets t ON t.id=? WHERE n.id=?", tailnet, node).Scan(&nodeOwner, &tailnetOwner, &nodeName, &tailnetName, &applicant); err != nil {
@@ -151,10 +163,6 @@ func (s *Store) RequestGrant(ctx context.Context, actor Actor, node, tailnet str
 	if err := writeAudit(ctx, tx, actor.ID, tailnetOwner, "grant", g.ID, "grant.request"); err != nil {
 		return Grant{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		return Grant{}, err
-	}
-	s.notifyPolicy(node)
 	return g, nil
 }
 

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net"
@@ -123,7 +124,37 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 			return err
 		}
 	}
-	return d.prepareNodePolicy(cfg.Node)
+	if err := d.prepareNodePolicy(cfg.Node); err != nil {
+		return err
+	}
+	return d.configureModeStore(ctx, cfg)
+}
+
+func (d *Daemon) configureModeStore(ctx context.Context, cfg config.Config) error {
+	owner, nodeID := "", ""
+	actor, err := d.controllerStore.LocalAdministrator(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	owner = actor.ID
+	if cfg.Controller.Enabled && d.nodeClient != nil {
+		clusterID, boundID := d.nodeClient.PolicyBinding()
+		localID, _, err := d.controllerStore.SnapshotIdentity(ctx)
+		if err != nil {
+			return err
+		}
+		if clusterID == localID && boundID != "" {
+			node, err := d.controllerStore.Node(ctx, actor, boundID)
+			if err != nil {
+				return err
+			}
+			if node.Domain != cfg.Server.Hostname {
+				return control.ErrConflict
+			}
+			owner, nodeID = node.OwnerID, node.ID
+		}
+	}
+	return d.controllerStore.ConfigureInstanceMode(ctx, string(cfg.EffectiveMode()), owner, cfg.Server.Hostname, nodeID)
 }
 
 func (d *Daemon) controllerAdmin(ctx context.Context, request admin.Request) admin.Response {

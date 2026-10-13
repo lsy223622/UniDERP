@@ -57,15 +57,72 @@ func restartModeTestDaemon(t *testing.T, path string) *Daemon {
 	return d
 }
 
-func modeTestLogin(t *testing.T, d *Daemon) {
+func modeTestLogin(t *testing.T, d *Daemon, passwords ...string) {
 	t.Helper()
-	r := httptest.NewRequest("POST", "https://mode.example.com/api/v1/login", strings.NewReader(`{"username":"mode-admin","password":"mode-test-password"}`))
+	password := "mode-test-password"
+	if len(passwords) != 0 {
+		password = passwords[0]
+	}
+	r := httptest.NewRequest("POST", "https://mode.example.com/api/v1/login", strings.NewReader(`{"username":"mode-admin","password":"`+password+`"}`))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Origin", "https://mode.example.com")
 	w := httptest.NewRecorder()
 	control.NewLocalHTTPHandler(d.controllerStore, d).ServeHTTP(w, r)
 	if w.Code != 200 {
 		t.Fatal("selected administrator lost access", w.Code, w.Body.String())
+	}
+}
+
+func TestModeRestoreKeepsSelectedAdmin(t *testing.T) {
+	d, actor := modeTestDaemon(t, config.ModeController)
+	if _, err := d.SwitchMode(t.Context(), actor, "member", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	archived := finishModeTestSwitch(t, d, actor)
+	if err := d.controllerStore.ChangePassword(t.Context(), actor, actor.ID, "new-member-password"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SwitchMode(t.Context(), actor, "controller", archived.ArchiveID, archived.Revision); err != nil {
+		t.Fatal(err)
+	}
+	finishModeTestSwitch(t, d, actor)
+	modeTestLogin(t, d, "new-member-password")
+	if _, _, err := d.controllerStore.CreateNode(t.Context(), actor, "New", "new.example.com", 443, 3478); err != nil {
+		t.Fatal("restored controller remains frozen", err)
+	}
+}
+
+func TestModeRestoreDoesNotReactivateRemote(t *testing.T) {
+	d, actor := modeTestDaemon(t, config.ModeController)
+	node, enrollment, err := d.controllerStore.CreateNode(t.Context(), actor, "Remote", "remote.example.com", 443, 3478)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clusterID, _, err := d.controllerStore.SnapshotIdentity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SwitchMode(t.Context(), actor, "member", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	archived := finishModeTestSwitch(t, d, actor)
+	if _, err := d.SwitchMode(t.Context(), actor, "controller", archived.ArchiveID, archived.Revision); err != nil {
+		t.Fatal(err)
+	}
+	finishModeTestSwitch(t, d, actor)
+	restoredID, _, err := d.controllerStore.SnapshotIdentity(t.Context())
+	if err != nil || restoredID != clusterID {
+		t.Fatal("explicit restore replaced original cluster identity", err)
+	}
+	remote, err := d.controllerStore.Node(t.Context(), actor, node.ID)
+	if err != nil || remote.Enabled || remote.State != "pending" {
+		t.Fatal("restoring archive revived remote membership", err, remote)
+	}
+	if _, err := d.controllerStore.EnrollmentChallenge(t.Context(), enrollment.Code, make([]byte, 32), strings.Repeat("e", 64)); err == nil {
+		t.Fatal("old enrollment restored")
+	}
+	if _, err := d.loadModeArchive(t.Context(), archived.ArchiveID); err != nil {
+		t.Fatal("restore mutated immutable archive", err)
 	}
 }
 

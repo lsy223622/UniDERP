@@ -53,6 +53,14 @@ func (h *httpHandler) mountTailnets() {
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	h.mux.HandleFunc("POST /api/v1/tailnets/{id}/local-grant/retry", func(w http.ResponseWriter, r *http.Request) {
+		result, err := s.RetryStandaloneGrant(r.Context(), h.actor(r), r.PathValue("id"))
+		if err != nil {
+			httpError(w, err)
+			return
+		}
+		writeJSON(w, result)
+	})
 	h.mux.HandleFunc("DELETE /api/v1/tailnets/{id}/credential", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.DeleteCredential(r.Context(), h.actor(r), r.PathValue("id")); err != nil {
 			httpError(w, err)

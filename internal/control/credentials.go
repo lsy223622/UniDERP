@@ -27,15 +27,16 @@ type OAuthCredential struct {
 }
 
 type Tailnet struct {
-	ID                  string `json:"id"`
-	OwnerID             string `json:"owner_id"`
-	DisplayName         string `json:"display_name"`
-	APIID               string `json:"api_id"`
-	Enabled             bool   `json:"enabled"`
-	CredentialStatus    string `json:"credential_status"`
-	CredentialError     string `json:"credential_error"`
-	CredentialUpdatedAt int64  `json:"credential_updated_at"`
-	LastSuccess         int64  `json:"last_identity_success"`
+	LocalGrant          *LocalGrantResult `json:"local_grant,omitempty"`
+	ID                  string            `json:"id"`
+	OwnerID             string            `json:"owner_id"`
+	DisplayName         string            `json:"display_name"`
+	APIID               string            `json:"api_id"`
+	Enabled             bool              `json:"enabled"`
+	CredentialStatus    string            `json:"credential_status"`
+	CredentialError     string            `json:"credential_error"`
+	CredentialUpdatedAt int64             `json:"credential_updated_at"`
+	LastSuccess         int64             `json:"last_identity_success"`
 }
 
 func (s *Store) EnableIdentity(keyFile string) error {
@@ -226,6 +227,22 @@ func (s *Store) AddTailnet(ctx context.Context, actor Actor, name, apiID string,
 	if err := s.publishIdentity(ctx, tx, tn.ID, keys); err != nil {
 		return Tailnet{}, err
 	}
+	mode, err := readInstanceMode(ctx, tx)
+	if err != nil {
+		return Tailnet{}, err
+	}
+	if mode.Mode == "standalone" {
+		result := LocalGrantResult{State: "skipped"}
+		if mode.Owner == actor.ID {
+			result.State = "pending"
+			result, err = s.completeStandaloneGrant(ctx, tx, actor, tn.ID, result)
+		} else {
+			err = writeLocalGrant(ctx, tx, tn.ID, result)
+		}
+		if err != nil {
+			return Tailnet{}, err
+		}
+	}
 	if err := writeAudit(ctx, tx, actor.ID, actor.ID, "tailnet", tn.ID, "tailnet.create"); err != nil {
 		return Tailnet{}, err
 	}
@@ -236,12 +253,16 @@ func (s *Store) AddTailnet(ctx context.Context, actor Actor, name, apiID string,
 	return s.Tailnet(ctx, actor, tn.ID)
 }
 
-const tailnetColumns = `t.id,t.owner_id,t.display_name,t.api_id,t.enabled,coalesce(c.status,'missing'),coalesce(c.error,''),coalesce(c.updated_at,0),coalesce(i.last_success,0)`
+const tailnetColumns = `t.id,t.owner_id,t.display_name,t.api_id,t.enabled,coalesce(c.status,'missing'),coalesce(c.error,''),coalesce(c.updated_at,0),coalesce(i.last_success,0),coalesce((SELECT value FROM settings WHERE key='local_grant:'||t.id),'')`
 const tailnetJoins = ` FROM tailnets t LEFT JOIN credentials c ON c.tailnet_id=t.id LEFT JOIN identity_snapshots i ON i.tailnet_id=t.id`
 
 func scanTailnet(row interface{ Scan(...any) error }) (Tailnet, error) {
 	var t Tailnet
-	err := row.Scan(&t.ID, &t.OwnerID, &t.DisplayName, &t.APIID, &t.Enabled, &t.CredentialStatus, &t.CredentialError, &t.CredentialUpdatedAt, &t.LastSuccess)
+	var local string
+	err := row.Scan(&t.ID, &t.OwnerID, &t.DisplayName, &t.APIID, &t.Enabled, &t.CredentialStatus, &t.CredentialError, &t.CredentialUpdatedAt, &t.LastSuccess, &local)
+	if err == nil && local != "" {
+		err = json.Unmarshal([]byte(local), &t.LocalGrant)
+	}
 	return t, err
 }
 

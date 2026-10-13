@@ -59,12 +59,13 @@ type Daemon struct {
 	logFilter      *logging.Filter
 	logf           func(string, ...any)
 
-	current        config.Config
-	desired        config.Config
-	pendingRestart bool
-	applyError     string
-	runCtx         context.Context
-	derper         derperProcess
+	current           config.Config
+	desired           config.Config
+	pendingRestart    bool
+	applyError        string
+	registrationError string
+	runCtx            context.Context
+	derper            derperProcess
 
 	adminServer          *admin.Server
 	adminListenerStarted bool

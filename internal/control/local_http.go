@@ -23,6 +23,7 @@ type LocalSettings struct {
 }
 
 type LocalStatus struct {
+	RegistrationError  string                `json:"registration_error,omitempty"`
 	Mode               string                `json:"mode"`
 	Certificate        CertificateStatus     `json:"certificate"`
 	Role               string                `json:"role"`

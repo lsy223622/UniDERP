@@ -99,6 +99,15 @@ func (d *Daemon) RegisterLocal(ctx context.Context, actor control.Actor, name st
 	if d.modeBusy.Load() {
 		return control.Node{}, control.ErrModeSwitch
 	}
+	node, err := d.registerLocal(ctx, actor, name)
+	if err == nil {
+		err = d.configureModeStore(ctx, d.activeConfig())
+	}
+	d.recordRegistrationError(err)
+	return node, err
+}
+
+func (d *Daemon) registerLocal(ctx context.Context, actor control.Actor, name string) (control.Node, error) {
 	if actor.Role != "admin" {
 		return control.Node{}, control.ErrForbidden
 	}
@@ -168,4 +177,26 @@ func (d *Daemon) RegisterLocal(ctx context.Context, actor control.Actor, name st
 	}
 	d.startNodeControl(d.runCtx)
 	return d.controllerStore.Node(ctx, actor, node.ID)
+}
+
+func (d *Daemon) prepareStandalone(ctx context.Context) {
+	actor, err := d.controllerStore.LocalAdministrator(ctx)
+	if err == nil {
+		_, err = d.registerLocal(ctx, actor, "Local DERP node")
+	}
+	if err == nil {
+		err = d.configureModeStore(ctx, d.activeConfig())
+	}
+	d.recordRegistrationError(err)
+}
+
+func (d *Daemon) recordRegistrationError(err error) {
+	message := ""
+	if err != nil {
+		message = err.Error()
+		d.logf("ERROR local node registration: %v", err)
+	}
+	d.mu.Lock()
+	d.registrationError = message
+	d.mu.Unlock()
 }

@@ -357,8 +357,17 @@ func (d *Daemon) stepModeSwitch(ctx context.Context) error {
 			if err := d.stopModeMembership(ctx); err != nil {
 				return err
 			}
-			if op.RestoreID != "" {
+			if op.RestoreID != "" && d.managementPath != managementDatabase(op.Target) {
 				if err := d.restoreController(ctx, op.RestoreID); err != nil {
+					return err
+				}
+				restored, err := control.OpenStore(managementDatabase(op.Target))
+				if err != nil {
+					return err
+				}
+				adoptErr := restored.AdoptModeAdministrator(ctx, d.controllerStore, op.Actor.ID)
+				closeErr := restored.Close()
+				if err := errors.Join(adoptErr, closeErr); err != nil {
 					return err
 				}
 			}
@@ -395,6 +404,11 @@ func (d *Daemon) stepModeSwitch(ctx context.Context) error {
 				return err
 			}
 		}
+		if op.RestoreID != "" {
+			if err := d.controllerStore.CompleteModeSwitch(ctx, op.Actor, op.RestoreID); err != nil {
+				return err
+			}
+		}
 		if err := d.controllerStore.InvalidateModeSessions(ctx); err != nil {
 			return err
 		}
@@ -407,6 +421,9 @@ func (d *Daemon) stepModeSwitch(ctx context.Context) error {
 		d.modeBusy.Store(false)
 		if err := d.prepareRole(d.runCtx, op.Target); err != nil {
 			return err
+		}
+		if op.Target.EffectiveMode() == config.ModeStandalone {
+			d.prepareStandalone(ctx)
 		}
 		if d.nodeClient != nil && d.derper.Running() {
 			d.startNodeControl(d.runCtx)

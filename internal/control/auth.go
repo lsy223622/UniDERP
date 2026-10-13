@@ -179,6 +179,11 @@ func (s *Store) createUser(ctx context.Context, actor Actor, username, password,
 	if _, err := tx.ExecContext(ctx, "INSERT INTO users(id,username,role,enabled,password_hash) VALUES(?,?,?,1,?)", a.ID, a.Username, a.Role, hash); err != nil {
 		return Actor{}, err
 	}
+	if initial {
+		if _, err := tx.ExecContext(ctx, "UPDATE settings SET value=? WHERE key='builtin_owner_id' AND value='' AND EXISTS(SELECT 1 FROM settings WHERE key='instance_mode' AND value='standalone')", a.ID); err != nil {
+			return Actor{}, err
+		}
+	}
 	if err := writeAudit(ctx, tx, actor.ID, a.ID, "user", a.ID, "user.create"); err != nil {
 		return Actor{}, err
 	}
