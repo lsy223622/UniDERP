@@ -241,9 +241,6 @@ func (d *Daemon) prepareModeRevocation(ctx context.Context) error {
 	if op == nil || !d.modeBusy.Load() || !op.Base.Controller.Enabled {
 		return nil
 	}
-	if err := d.controllerStore.ConfigureNodes(op.Base.Controller.AllowedNodeCIDRs); err != nil {
-		return err
-	}
 	status, err := d.controllerStore.BeginModeSwitch(ctx, op.Actor, control.ModeSwitchRequest{ID: op.Status.ID, From: op.Status.From, Target: op.Status.Target, BuiltinNodeID: op.BuiltinNodeID})
 	if err != nil {
 		return err
@@ -453,21 +450,28 @@ func (d *Daemon) stopModeMembership(ctx context.Context) error {
 	if err := d.stopRelay(ctx); err != nil {
 		return err
 	}
-	if d.nodeClient != nil {
-		previous, err := d.nodeClient.ClearRegistration()
+	if d.nodeClient == nil {
+		client, err := cluster.NewEnrollmentClient(nodeControllerURL(op.Base), op.Base.Node.StateDir)
 		if err != nil {
 			return err
 		}
-		if err := cluster.RemoveCache(d.policyClient.Path); err != nil {
-			return err
-		}
-		if previous.Token != "" && !op.Base.Controller.Enabled {
-			notifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			op.LeaveNotified = d.nodeClient.Release(notifyCtx, previous) == nil
-			notified := op.LeaveNotified
-			op.Status.LeaveNotified = &notified
-			cancel()
-		}
+		d.mu.Lock()
+		d.nodeClient = client
+		d.mu.Unlock()
+	}
+	previous, err := d.nodeClient.ClearRegistration()
+	if err != nil {
+		return err
+	}
+	if err := cluster.RemoveCache(filepath.Join(op.Base.Node.StateDir, "policy.json")); err != nil {
+		return err
+	}
+	if previous.Token != "" && !op.Base.Controller.Enabled {
+		notifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		op.LeaveNotified = d.nodeClient.Release(notifyCtx, previous) == nil
+		notified := op.LeaveNotified
+		op.Status.LeaveNotified = &notified
+		cancel()
 	}
 	op.LocalStopped = true
 	return d.writeModeJournal()

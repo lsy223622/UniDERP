@@ -69,6 +69,10 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := db.QueryRow("SELECT value FROM settings WHERE key='cluster_id'").Scan(&s.clusterID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 

@@ -472,6 +472,54 @@ func TestModeSwitchPreparationFailureKeepsAuthorizationFrozen(t *testing.T) {
 	}
 }
 
+func TestModeSwitchPreparationFailureRestartClearsMembership(t *testing.T) {
+	d, actor := modeTestDaemon(t, config.ModeController)
+	d.stopNodeControl()
+	base := d.activeConfig()
+	keyBytes, err := os.ReadFile(base.Controller.KeyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := `{"controller_url":"https://mode.example.com","domain":"mode.example.com","session":{"cluster_id":"` + strings.Repeat("a", 64) + `","node_id":"` + strings.Repeat("b", 64) + `","token":"` + strings.Repeat("c", 64) + `"}}`
+	for name, data := range map[string][]byte{"registration.json": []byte(registration), "policy.json": []byte("old policy"), "policy.json.watermark": []byte("old watermark")} {
+		if err := os.WriteFile(filepath.Join(base.Node.StateDir, name), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(base.Controller.KeyFile, []byte("corrupt-key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SwitchMode(t.Context(), actor, "member", "", 0); err == nil {
+		t.Fatal("invalid key did not fail preparation")
+	}
+	if err := d.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	d = restartModeTestDaemon(t, d.configPath)
+	if d.nodeClient != nil {
+		t.Fatal("fixture did not exercise incomplete role preparation")
+	}
+	if err := os.WriteFile(base.Controller.KeyFile, keyBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	status, err := d.ModeSwitchStatus(t.Context(), actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SwitchMode(t.Context(), actor, "member", "", status.Revision); err != nil {
+		t.Fatal(err)
+	}
+	finishModeTestSwitch(t, d, actor)
+	for _, name := range []string{"policy.json", "policy.json.watermark"} {
+		if _, err := os.Stat(filepath.Join(base.Node.StateDir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("old permission state survived recovery", name, err)
+		}
+	}
+	if _, nodeID := d.nodeClient.PolicyBinding(); nodeID != "" {
+		t.Fatal("old registration survived recovery")
+	}
+}
+
 func TestModeSwitchRejectsUnownedStorageBeforeRevocation(t *testing.T) {
 	d, actor := modeTestDaemon(t, config.ModeController)
 	node, _, err := d.controllerStore.CreateNode(t.Context(), actor, "Remote", "remote.example.com", 443, 3478)

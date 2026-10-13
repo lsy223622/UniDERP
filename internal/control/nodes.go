@@ -54,8 +54,10 @@ func (s *Store) ConfigureNodes(allowedCIDRs []string) error {
 	if _, err := s.db.Exec("INSERT INTO settings(key,value) VALUES('cluster_id',?),('identity_retention_seconds','86400'),('control_retention_seconds','86400') ON CONFLICT(key) DO NOTHING", randomToken()); err != nil {
 		return err
 	}
-	if err := s.db.QueryRow("SELECT value FROM settings WHERE key='cluster_id'").Scan(&s.clusterID); err != nil {
-		return err
+	if s.clusterID == "" {
+		if err := s.db.QueryRow("SELECT value FROM settings WHERE key='cluster_id'").Scan(&s.clusterID); err != nil {
+			return err
+		}
 	}
 	verifier := newDomainVerifier(prefixes)
 	s.verifyDomain = verifier.verify

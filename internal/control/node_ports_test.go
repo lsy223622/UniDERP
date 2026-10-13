@@ -104,6 +104,7 @@ INSERT INTO users VALUES('owner','owner','member',1,'hash',1);
 CREATE TABLE nodes(id TEXT PRIMARY KEY,owner_id TEXT,domain TEXT,display_name TEXT,region_id INTEGER,state TEXT,last_heartbeat INTEGER,last_error TEXT,enabled INTEGER);
 INSERT INTO nodes VALUES('node','owner','relay.example.com','Relay',902,'registered',123,'',1);
 CREATE TABLE audit(id INTEGER PRIMARY KEY,actor_id TEXT NOT NULL,owner_id TEXT NOT NULL,resource_type TEXT NOT NULL,resource_id TEXT NOT NULL,action TEXT NOT NULL,created_at INTEGER NOT NULL);
+CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 PRAGMA user_version=5;`)
 	db.Close()
 	if err != nil {
