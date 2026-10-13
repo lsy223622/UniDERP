@@ -336,6 +336,49 @@ func (s *Store) CompleteModeSwitch(ctx context.Context, actor Actor, id string) 
 	return tx.Commit()
 }
 
+func (s *Store) RetireModeBuiltin(ctx context.Context, actor Actor, id, builtin string) error {
+	if builtin == "" {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := modeAdministrator(ctx, tx, actor); err != nil {
+		return err
+	}
+	status, err := readModeSwitch(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if status.ID != id || status.Stage != "archiving" || status.Target != "member" {
+		return ErrConflict
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE grants SET state='revoked',revision=revision+1,last_control_success=0 WHERE node_id=? AND state!='revoked'", builtin); err != nil {
+		return err
+	}
+	if err := s.releaseNode(ctx, tx, builtin); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) InvalidateModeSessions(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "UPDATE users SET session_version=session_version+1"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func recordPermissionHorizon(ctx context.Context, tx *sql.Tx, policy cluster.Policy) error {
 	var until int64
 	for _, grant := range policy.Grants {

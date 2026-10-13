@@ -15,7 +15,7 @@ func (s *Store) LocalAdministrator(ctx context.Context) (Actor, error) {
 	return actor, err
 }
 
-func (s *Store) PreserveLocalAdmin(ctx context.Context, actorID, destination string) error {
+func (s *Store) ValidateLocalAdminDestination(ctx context.Context, destination string) error {
 	abs, err := filepath.Abs(destination)
 	if err != nil {
 		return err
@@ -38,6 +38,17 @@ func (s *Store) PreserveLocalAdmin(ctx context.Context, actorID, destination str
 			return ErrConflict
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) PreserveLocalAdmin(ctx context.Context, actorID, destination string) error {
+	if err := s.ValidateLocalAdminDestination(ctx, destination); err != nil {
+		return err
+	}
+	abs, err := filepath.Abs(destination)
+	if err != nil {
 		return err
 	}
 	var username string

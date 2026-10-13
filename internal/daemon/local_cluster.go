@@ -11,6 +11,9 @@ import (
 func (d *Daemon) Join(ctx context.Context, origin, code string) error {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return control.ErrModeSwitch
+	}
 	if d.Role() != "member" || d.nodeClient == nil {
 		return control.ErrConflict
 	}
@@ -50,6 +53,9 @@ func (d *Daemon) Join(ctx context.Context, origin, code string) error {
 func (d *Daemon) Leave(ctx context.Context) (bool, error) {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return false, control.ErrModeSwitch
+	}
 	if d.nodeClient == nil {
 		return false, control.ErrConflict
 	}
@@ -90,6 +96,9 @@ func (d *Daemon) Leave(ctx context.Context) (bool, error) {
 func (d *Daemon) RegisterLocal(ctx context.Context, actor control.Actor, name string) (control.Node, error) {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return control.Node{}, control.ErrModeSwitch
+	}
 	if actor.Role != "admin" {
 		return control.Node{}, control.ErrForbidden
 	}

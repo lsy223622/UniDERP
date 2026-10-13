@@ -20,6 +20,9 @@ func (d *Daemon) startManagement(cfg config.Config) error {
 	if cfg.Controller.Enabled {
 		database, listen = cfg.Controller.Database, cfg.Controller.Listen
 	}
+	if !cfg.Controller.Enabled && d.modeState.Listen != "" {
+		listen = d.modeState.Listen
+	}
 	store, err := control.OpenStore(database)
 	if err != nil {
 		return fmt.Errorf("open controller database: %w", err)
@@ -85,17 +88,19 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 		if err := d.controllerStore.ConfigureNodes(cfg.Controller.AllowedNodeCIDRs); err != nil {
 			return err
 		}
-		syncCtx, cancel := context.WithCancel(ctx)
-		d.controllerCancel = cancel
-		done := make(chan struct{})
-		d.controllerDone = done
-		store := d.controllerStore
-		go func() {
-			defer close(done)
-			if err := store.RunIdentitySync(syncCtx); err != nil {
-				d.reportFatal(err)
-			}
-		}()
+		if !d.modeBusy.Load() {
+			syncCtx, cancel := context.WithCancel(ctx)
+			d.controllerCancel = cancel
+			done := make(chan struct{})
+			d.controllerDone = done
+			store := d.controllerStore
+			go func() {
+				defer close(done)
+				if err := store.RunIdentitySync(syncCtx); err != nil {
+					d.reportFatal(err)
+				}
+			}()
+		}
 	}
 	origin := cfg.Node.ControllerURL
 	if cfg.Controller.Enabled && cfg.Server.Hostname != "" {
@@ -124,6 +129,9 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 func (d *Daemon) controllerAdmin(ctx context.Context, request admin.Request) admin.Response {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return admin.Failure("instance mode switch is in progress")
+	}
 	if d.controllerStore == nil || d.Role() != "controller" {
 		return admin.Failure("controller is not enabled")
 	}

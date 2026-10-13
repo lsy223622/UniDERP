@@ -101,6 +101,9 @@ func (d *Daemon) saveLocalConfig(cfg config.Config) error {
 func (d *Daemon) SaveSettings(ctx context.Context, settings control.LocalSettings) error {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return control.ErrModeSwitch
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -192,6 +195,9 @@ func (d *Daemon) stopRelay(ctx context.Context) error {
 func (d *Daemon) ApplySettings(ctx context.Context) error {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return control.ErrModeSwitch
+	}
 	err := d.applyLocalConfig(ctx, d.desiredConfig())
 	if err != nil {
 		d.setApplyError(err)
@@ -247,6 +253,13 @@ func (d *Daemon) applyLocalConfig(ctx context.Context, cfg config.Config) error 
 	d.pendingRestart = false
 	d.applyError = ""
 	d.mu.Unlock()
+	d.modeState.ActiveMode = cfg.EffectiveMode()
+	if cfg.Controller.Enabled {
+		d.modeState.Listen = cfg.Controller.Listen
+	}
+	if err := d.writeModeJournal(); err != nil {
+		return err
+	}
 	if d.nodeClient != nil && d.derper.Running() {
 		d.startNodeControl(d.runCtx)
 	}
@@ -256,6 +269,9 @@ func (d *Daemon) applyLocalConfig(ctx context.Context, cfg config.Config) error 
 func (d *Daemon) UploadCertificate(ctx context.Context, certificate, privateKey string) error {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return control.ErrModeSwitch
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

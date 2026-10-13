@@ -84,6 +84,10 @@ type Daemon struct {
 	nodeCancel           context.CancelFunc
 	nodeDone             chan struct{}
 	nodeConflict         bool
+	modeState            instanceModeState
+	modeBusy             atomic.Bool
+	modeCancel           context.CancelFunc
+	modeDone             chan struct{}
 
 	fatal     chan error
 	fatalOnce sync.Once
@@ -145,6 +149,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 	for _, warning := range parsed.Warnings {
 		d.logf("WARN %s", warning)
 	}
+	parsed.Config, err = d.loadModeJournal(parsed.Config)
+	if err != nil {
+		return d.abortStart(err)
+	}
 	d.mu.Lock()
 	d.current = parsed.Config.Clone()
 	d.desired = parsed.Config.Clone()
@@ -153,6 +161,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.runCtx = ctx
 	if err := d.startManagement(parsed.Config); err != nil {
 		return d.abortStart(err)
+	}
+	if err := d.prepareModeRevocation(ctx); err != nil {
+		d.setApplyError(err)
 	}
 	if err := d.prepareRole(ctx, parsed.Config); err != nil {
 		d.setApplyError(err)
@@ -163,7 +174,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if err := d.startHealthServer(parsed.Config.Server.Health.Listen); err != nil {
 		return d.abortStart(err)
 	}
-	if d.applyError == "" {
+	resumeRelay := !d.modeBusy.Load() || d.modeState.Operation.Phase == "preparing" || d.modeState.Operation.Phase == "revoking"
+	if d.applyError == "" && resumeRelay {
 		if err := d.syncDerper(ctx); err != nil {
 			d.setApplyError(err)
 		}
@@ -176,6 +188,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if d.nodeClient != nil && d.derper.Running() {
 		d.startNodeControl(ctx)
 	}
+	if err := d.writeModeJournal(); err != nil {
+		return d.abortStart(err)
+	}
+	d.startModeWorker(ctx)
 	return nil
 }
 
@@ -417,6 +433,9 @@ func (d *Daemon) reloadConfig(ctx context.Context) admin.Response {
 }
 
 func (d *Daemon) commitConfig(ctx context.Context, cfg config.Config, warnings []string) error {
+	if d.modeBusy.Load() {
+		return control.ErrModeSwitch
+	}
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -523,6 +542,7 @@ func (d *Daemon) shutdownInternal() error {
 	d.startup = false
 	d.childOK = false
 	d.mu.Unlock()
+	d.stopModeWorker()
 	if d.adminServer != nil {
 		if adminErr := d.adminServer.StopAccepting(); adminErr != nil {
 			err = errors.Join(err, adminErr)
