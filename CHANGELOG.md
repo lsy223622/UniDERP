@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.2.0] - 2026-10-14
 
 - Adds Standalone, Controller and Member instance modes, with three initial
   setup choices and a recoverable local-administrator switching workflow.
@@ -10,6 +10,10 @@
 - Prepares the standalone local node and grants newly added owner Tailnets
   local access, with explicit partial-result retries and no revival of
   revoked grants. Adds Chinese and English mode progress and restrictions.
+- Validates archived database/key pairs by authenticating encrypted records,
+  preserves interrupted preparation recovery, and handles never-enrolled
+  legacy nodes without guessing expiry for previously authorized nodes.
+- Publishes Linux/amd64 images as ghcr.io/lsy223622/uniderp:2.2.0 and latest.
 
 ## [2.1.0] - 2026-10-12
 
