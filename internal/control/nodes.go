@@ -137,6 +137,13 @@ func (s *Store) CreateNode(ctx context.Context, actor Actor, name, domain string
 	if err := RequireOwner(actor, actor.ID); err != nil {
 		return Node{}, Enrollment{}, err
 	}
+	mode, err := readInstanceMode(ctx, tx)
+	if err != nil {
+		return Node{}, Enrollment{}, err
+	}
+	if mode.Mode == "standalone" && (domain != mode.Domain || actor.ID != mode.Owner) {
+		return Node{}, Enrollment{}, ErrStandalone
+	}
 	var region int
 	if err := tx.QueryRowContext(ctx, `WITH RECURSIVE ids(n) AS (VALUES(900) UNION ALL SELECT n+1 FROM ids WHERE n<999) SELECT coalesce(min(n),0) FROM ids WHERE n NOT IN (SELECT region_id FROM nodes)`).Scan(&region); err != nil {
 		return Node{}, Enrollment{}, err
@@ -168,6 +175,9 @@ func (s *Store) IssueEnrollment(ctx context.Context, actor Actor, id string) (En
 	}
 	defer tx.Rollback()
 	if err := activeActor(ctx, tx, actor); err != nil {
+		return Enrollment{}, err
+	}
+	if err := requireStandaloneNode(ctx, tx, id); err != nil {
 		return Enrollment{}, err
 	}
 	n, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM nodes WHERE id=?", id))

@@ -17,7 +17,7 @@ import (
 )
 
 func (d *Daemon) startManagement(cfg config.Config) error {
-	database, listen := managementDatabase(cfg), "127.0.0.1:3341"
+	database, listen := d.managementDatabase(cfg), "127.0.0.1:3341"
 	if cfg.Controller.Enabled {
 		database, listen = cfg.Controller.Database, cfg.Controller.Listen
 	}
@@ -30,6 +30,9 @@ func (d *Daemon) startManagement(cfg config.Config) error {
 	}
 	d.controllerStore = store
 	d.managementPath = database
+	if !cfg.Controller.Enabled {
+		d.modeState.MemberDatabase = database
+	}
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return fmt.Errorf("listen controller: %w", err)
@@ -76,7 +79,7 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 	if cfg.SetupRequired {
 		return nil
 	}
-	if !cfg.Controller.Enabled || managementDatabase(cfg) != d.managementPath {
+	if !cfg.Controller.Enabled || d.managementDatabase(cfg) != d.managementPath {
 		d.stopController()
 	}
 	if err := d.replaceManagementStore(ctx, cfg, ""); err != nil {

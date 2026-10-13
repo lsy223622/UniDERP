@@ -12,6 +12,7 @@ import (
 	"github.com/lsy223622/UniDERP/v2/internal/admin"
 	"github.com/lsy223622/UniDERP/v2/internal/cluster"
 	"github.com/lsy223622/UniDERP/v2/internal/config"
+	"github.com/lsy223622/UniDERP/v2/internal/control"
 	"github.com/lsy223622/UniDERP/v2/internal/derper"
 )
 
@@ -82,6 +83,9 @@ func (d *Daemon) nodeControlSample(ctx context.Context, policy derper.PolicyClie
 func (d *Daemon) nodeAdmin(ctx context.Context, r admin.Request) admin.Response {
 	d.opMu.Lock()
 	defer d.opMu.Unlock()
+	if d.modeBusy.Load() {
+		return admin.Failure(control.ErrModeSwitch.Error())
+	}
 	if d.nodeClient == nil {
 		return admin.Failure("node identity is not configured")
 	}

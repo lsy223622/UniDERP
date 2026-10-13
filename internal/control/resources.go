@@ -110,6 +110,11 @@ func (s *Store) SetNodeEnabled(ctx context.Context, actor Actor, id string, enab
 	if err := activeActor(ctx, tx, actor); err != nil {
 		return err
 	}
+	if enabled {
+		if err := requireStandaloneNode(ctx, tx, id); err != nil {
+			return err
+		}
+	}
 	n, err := scanNode(tx.QueryRowContext(ctx, "SELECT "+nodeColumns+" FROM nodes WHERE id=?", id))
 	if err != nil {
 		return err

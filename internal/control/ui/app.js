@@ -1,6 +1,6 @@
 'use strict';
 initializeLanguage();
-let actor, csrf, serverRole;
+let actor, csrf, serverRole, serverMode, builtinNodeID;
 let pageGeneration=0,detailGeneration=0,currentPage='',refreshTimer;
 let resourceScope='mine', userNames=new Map(),visibleNodes=new Map();
 const $ = id => document.getElementById(id);
@@ -13,7 +13,7 @@ async function api(path,method='GET',body) {
   let r;try{r=await fetch('/api/v1'+path,{method,headers,credentials:'same-origin',body:body===undefined?undefined:JSON.stringify(body)});}catch(e){if(e.name==='AbortError')throw e;throw localizedError(msg('errors.network'));}
   const result = await r.json().catch(() => ({}));
   if(generation!==pageGeneration)throw new DOMException('Page changed','AbortError');
-  if (!r.ok) { const e = localizedError(({invalid_hostname:msg("errors.enterAHostnameSuchAsDerpExampleComWithout"),certificate_required:msg("errors.uploadTheCertificateChainAndPrivateKeyBeforeApplying"),certificate_invalid:msg("errors.theCertificateChainAndPrivateKeyDoNotMatch"),certificate_hostname_mismatch:msg("errors.theCertificateDoesNotMatchTheSavedPublicDERP")})[result.code]||({400:msg("errors.checkTheHighlightedFieldsAndTryAgain"),401:msg("errors.signInAgain"),403:msg("errors.youDoNotHavePermissionToPerformThisAction"),409:msg("errors.theStateHasChangedRefreshAndTryAgain"),429:msg("errors.tooManyRequestsTryAgainShortly"),503:msg("errors.theIdentitySourceIsUnavailableCheckTheTailnetID")})[r.status] || msg("errors.requestFailedCheckTheResourceStatusAndTryAgain")); e.status=r.status;e.code=result.code;e.field=result.field; throw e; }
+  if (!r.ok) { const e = localizedError(({standalone_disabled:msg("mode.disabled"),mode_switch_in_progress:msg("mode.inProgress"),invalid_hostname:msg("errors.enterAHostnameSuchAsDerpExampleComWithout"),certificate_required:msg("errors.uploadTheCertificateChainAndPrivateKeyBeforeApplying"),certificate_invalid:msg("errors.theCertificateChainAndPrivateKeyDoNotMatch"),certificate_hostname_mismatch:msg("errors.theCertificateDoesNotMatchTheSavedPublicDERP")})[result.code]||({400:msg("errors.checkTheHighlightedFieldsAndTryAgain"),401:msg("errors.signInAgain"),403:msg("errors.youDoNotHavePermissionToPerformThisAction"),409:msg("errors.theStateHasChangedRefreshAndTryAgain"),429:msg("errors.tooManyRequestsTryAgainShortly"),503:msg("errors.theIdentitySourceIsUnavailableCheckTheTailnetID")})[r.status] || msg("errors.requestFailedCheckTheResourceStatusAndTryAgain")); e.status=r.status;e.code=result.code;e.field=result.field; throw e; }
   return result;
 }
 function el(tag,text,className) { const e=document.createElement(tag); if(text!==undefined)setText(e,text); if(className)e.className=className; return e; }
@@ -56,7 +56,7 @@ async function openNode(n){const entry=visibleNodes.get(n.id);if(entry?.summary&
 function sharedNodeInfo(entry){const s=entry.summary,c=detailCard(msg("nodes.overview2",entry.node.display_name),'state-'+entry.node.id);c.append(el('p',msg("nodes.provider2",entry.node.domain,s.provider),'muted'));ruleSummary(c,s.qos);const figure=el('div',undefined,'qos-preview');c.append(figure);qosFigure(figure,s.qos,{tailnet_caps_unknown:true});probeTable(c,s.probes,s.node);return c;}
 async function nodeGrants(n){const ticket=++detailGeneration,grants=await api('/grants');if(ticket!==detailGeneration)return;const c=detailCard(msg("grants.accessGrants2",n.display_name),'state-'+n.id),incoming=n.owner_id===actor.id||actor.role==='admin';table(c,['Tailnet',msg("grants.accessStatus"),msg("grants.nextStep")],grants.filter(g=>g.node_id===n.id).map(g=>[g.tailnet_name,actions(status(g.state),el('p',grantGuidance(g,incoming),'muted')),el('a',incoming?msg("grants.viewIncomingRequests"):msg("grants.viewMyAccessGrants"))]));c.querySelectorAll('a').forEach(a=>a.href='#'+(incoming?'requests':'grants')+'?q='+encodeURIComponent(n.display_name)+(actor.role==='admin'&&n.owner_id!==actor.id?'&scope=all':''));}
 
-function nodeMaintenance(n){const c=detailCard(msg("nodes.enrollmentAndMaintenance",n.display_name),'state-'+n.id);c.append(el('p',msg("nodes.updateTheDERPMapAfterChangingEnrollmentHostnamesOr"),'muted'));c.append(actions(button(msg("nodes.publicPorts"),()=>nodePorts(n)),button(msg("nodes.hostname"),()=>changeDomain(n)),button(n.state==='pending'?msg("nodes.enrollmentCode"):msg("nodes.reissueEnrollmentCode"),()=>enrollment(n)),button(msg("nodes.deleteNode"),()=>deleteNode(n),'danger')));}
+function nodeMaintenance(n){const c=detailCard(msg("nodes.enrollmentAndMaintenance",n.display_name),'state-'+n.id);c.append(el('p',msg("nodes.updateTheDERPMapAfterChangingEnrollmentHostnamesOr"),'muted'));c.append(actions(button(msg("nodes.publicPorts"),()=>nodePorts(n)),button(msg("nodes.hostname"),()=>changeDomain(n)),modeDisabled(button(n.state==='pending'?msg("nodes.enrollmentCode"):msg("nodes.reissueEnrollmentCode"),()=>enrollment(n)),n.id!==builtinNodeID),button(msg("nodes.deleteNode"),()=>deleteNode(n),'danger')));if(serverMode==='standalone'&&n.id!==builtinNodeID)c.append(el('p',msg("mode.disabled"),'muted'));}
 async function scopeSelector(){
  if(actor.role!=='admin')return;
  const users=await api('/users');userNames=new Map(users.map(u=>[u.id,u.username]));
@@ -173,6 +173,7 @@ async function tailnets(){
     const details=el('div',undefined,'resource-details'),facts=el('div',undefined,'resource-facts');
     facts.append(actions(status(t.enabled?'active':'paused'),status(t.credential_status)),el('span',t.last_identity_success?msg("tailnets.identityRefreshedCachedUntil",time(t.last_identity_success),time(t.last_identity_success+retention.identity_seconds)):msg("tailnets.noCompleteIdentityRefreshYet"),'muted'));
     details.append(facts);
+    if(t.local_grant&&['pending','failed'].includes(t.local_grant.state)){details.append(el('p',t.local_grant.state==='pending'?msg("mode.ownPending"):msg("mode.ownFailed"),'muted'),button(msg("mode.retryOwn"),async()=>{await api('/tailnets/'+t.id+'/local-grant/retry','POST',{});await render({preserveScroll:true});}));}
     table(details,[msg("tailnets.derpNodeProvider"),msg("nodes.hostnamePublicPorts"),msg("tailnets.nodeStatusAccessDeadline")],entries.map(({grant,relay})=>[
       actions(el('span',relay.node.display_name),el('span',msg("nodes.provider",relay.provider),'muted')),
       el('code',relay.node.domain+' · DERP TCP '+relay.node.derp_port+' / STUN UDP '+relay.node.stun_port),
@@ -201,7 +202,7 @@ async function tailnets(){
     header.append(disclosure,controls);c.append(header,mapPanel);$('content').append(c);
   }
   if(!items.length)$('content').append(el('p',msg("tailnets.noTailnetsConnectedYet"),'muted'));
-  const f=form(addFormCard(msg("tailnets.connectTailnet"),items.length),msg("tailnets.verifyAndConnect"),async(data,f)=>{const body={display_name:data.get('name'),api_id:data.get('api_id'),credential:{client_secret:data.get('client_secret')}};f.elements.client_secret.value='';await api('/tailnets','POST',body);});
+  const f=form(addFormCard(msg("tailnets.connectTailnet"),items.length),msg("tailnets.verifyAndConnect"),async(data,f)=>{const body={display_name:data.get('name'),api_id:data.get('api_id'),credential:{client_secret:data.get('client_secret')}};f.elements.client_secret.value='';const result=await api('/tailnets','POST',body);if(['pending','failed'].includes(result.local_grant?.state))return()=>notice(result.local_grant.state==='pending'?msg("mode.ownPending"):msg("mode.ownFailed"));});
   field(f,'name',msg("common.displayName"));field(f,'api_id',msg("tailnets.tailnetIDTheTIdentifierInGeneralSettings")).autocomplete='off';secretFields(f);done(f);
 }
 async function transfer(t){
@@ -217,7 +218,7 @@ async function nodes(){
   if(local&&!local.joined)$('content').append(button(msg("nodes.registerTheBuiltInNode"),async()=>{await api('/local/register','POST',{display_name:local.saved.hostname||'主控内置节点'});await render();},'primary'));
   listFilters('node');for(const n of allItems)visibleNodes.set(n.id,{node:n,editable:true});
   const list=card(msg("nodes.derpNodes"));
-  const nodeActions=n=>actions(button(msg("common.status"),()=>nodeState(n)),...(n.state!=='pending'?[button(msg("nodes.rules"),()=>qos(n,true))]:[]),...(local?.node_id===n.id?[button(msg("nodes.localManagement"),()=>{location.hash='member';})]:[]),more(button(msg("nodes.publicPorts"),()=>nodePorts(n)),button(n.state==='pending'?msg("nodes.enrollmentCode"):msg("nodes.reissueEnrollmentCode"),()=>enrollment(n)),button(n.enabled?msg("common.pause"):msg("common.enable"),async()=>{await api('/nodes/'+n.id+'/enabled','POST',{enabled:!n.enabled});await render();}),...(n.state!=='pending'?[button(msg("nodes.hostname"),()=>changeDomain(n))]:[]),button(msg("nodes.deleteNode"),()=>deleteNode(n),'danger')));
+  const nodeActions=n=>actions(button(msg("common.status"),()=>nodeState(n)),...(n.state!=='pending'?[button(msg("nodes.rules"),()=>qos(n,true))]:[]),...(local?.node_id===n.id?[button(msg("nodes.localManagement"),()=>{location.hash='member';})]:[]),more(button(msg("nodes.publicPorts"),()=>nodePorts(n)),modeDisabled(button(n.state==='pending'?msg("nodes.enrollmentCode"):msg("nodes.reissueEnrollmentCode"),()=>enrollment(n)),n.id!==builtinNodeID),modeDisabled(button(n.enabled?msg("common.pause"):msg("common.enable"),async()=>{await api('/nodes/'+n.id+'/enabled','POST',{enabled:!n.enabled});await render();}),!n.enabled&&n.id!==builtinNodeID&&n.domain!==local?.active.hostname),...(n.state!=='pending'?[button(msg("nodes.hostname"),()=>changeDomain(n))]:[]),button(msg("nodes.deleteNode"),()=>deleteNode(n),'danger')));
   if(!items.length)listEmpty(list,allItems.length,allItems.length?msg("nodes.noNodesToShow"):msg("nodes.addAndEnrollYourFirstDERPNode"));else table(list,[msg("nodes.name"),msg("nodes.hostnamePublicPorts"),msg("common.status"),msg("nodes.lastHeartbeat4"),msg("common.actions")],items.map(n=>[
     actions(button(n.display_name,()=>openNode(n),'resource-name'),...(actor.role==='admin'&&n.owner_id!==actor.id?[el('span',managedLabel(n.owner_id),'badge')]:[]),...(local?.node_id===n.id?[el('span',msg("nodes.builtInNode"),'badge')]:[])),el('code',n.domain+' · DERP TCP '+n.derp_port+' / STUN UDP '+n.stun_port),actions(status(n.state),...(!n.enabled?[status('paused')]:[])),observedTime(n.last_heartbeat),
     nodeActions(n)
@@ -225,6 +226,7 @@ async function nodes(){
   list.querySelectorAll('tbody tr').forEach((r,i)=>r.dataset.nodeId=items[i].id);
   if(items.some(n=>n.state==='pending'||n.state==='registered'))limitedRefresh(list,async()=>{const fresh=await api('/nodes');if(!list.isConnected)return false;let pending=false;for(const [i,n]of items.entries()){const updated=fresh.find(x=>x.id===n.id);if(!updated)continue;const row=list.querySelectorAll('tbody tr[data-node-id]')[i];const stateChanged=n.state!==updated.state||n.enabled!==updated.enabled;Object.assign(n,updated);row.children[2].replaceChildren(status(n.state),...(!n.enabled?[status('paused')]:[]));row.children[3].replaceChildren(observedTime(n.last_heartbeat));if(stateChanged)row.children[4].replaceChildren(nodeActions(n));if(updated.state==='pending'||updated.state==='registered')pending=true;}return pending;});
   const f=form(addFormCard(msg("nodes.addDERPNode"),allItems.length),msg("nodes.createNodeAndIssueCode"),async data=>{const result=await api('/nodes','POST',{display_name:data.get('name'),domain:data.get('domain').trim(),derp_port:Number(data.get('derp_port')),stun_port:Number(data.get('stun_port'))});return()=>showEnrollment(result.enrollment,result.node);});field(f,'name',msg("common.displayName"));field(f,'domain',msg("nodes.publicDERPHostname"));publicPortFields(f,{derp_port:443,stun_port:3478});done(f);
+  if(serverMode==='standalone'){f.append(el('p',msg("mode.disabled"),'muted'));for(const control of f.elements)control.disabled=true;modeDisabled(f.submitButton);}
 }
 function publicPortFields(f,n) {
   for(const [name,label] of [['derp_port',msg("nodes.publicDERPTCPPort")],['stun_port',msg("nodes.publicSTUNUDPPort")]]){const input=field(f,name,label,'number',true,n[name]);input.min='1';input.max='65535';input.step='1';}
@@ -335,6 +337,7 @@ async function directory(){
       disclosure.append(summary,details);
       const controls=el('div',undefined,'resource-actions');
       const grant=selected&&grants.find(g=>g.node_id===n.id&&g.tailnet_id===selected.id),action=directoryAction(grant);if(selected){controls.append(action==='confirm'?button(msg("grants.confirmAccess"),async()=>{await api('/grants/'+grant.id+'/actions','POST',{expected_revision:grant.revision,action:'confirm'});await render({preserveScroll:true});},'primary'):action==='request'?button(msg("grants.requestAccess"),()=>request(n,tailnets,selected.id),'primary'):button(action==='wait'?msg("nodes.viewPendingRequest"):msg("nodes.viewAccessGrant"),()=>{location.hash='#grants?tailnet='+encodeURIComponent(selected.id)+(actor.role==='admin'&&selected.owner_id!==actor.id?'&scope=all':'');}));details.prepend(el('p',grant?grantGuidance(grant,false):msg("nodes.thisTailnetHasNotRequestedAccessToTheNode"),'muted'));}controls.append(button(msg("nodes.rulesAndEndpointChecks"),()=>sharedNodeInfo(visibleNodes.get(n.id))));
+      if(n.id!==builtinNodeID){const mutation=controls.querySelector('button.primary');if(mutation)modeDisabled(mutation);}
       header.append(disclosure,controls);nodeCard.append(header);nodeCard.dataset.nodeId=n.id;list.append(nodeCard);
     }
     if(!items.length)listEmpty(list,nodes.length,msg("nodes.noAvailableNodesInThisGroup"));
@@ -450,11 +453,12 @@ function localApplication(s){
  const link=el('a',msg("settings.viewLocalConnectionAndRuntimeStatus"));link.href='#member';c.append(link);return c;
 }
 
-function localConfigForm(s,role,initial=false) {
- const c=card(role==='controller'?msg("settings.builtInDERPNodeConfiguration"):msg("settings.localDERPNodeConfiguration"));
+function localConfigForm(s,mode,initial=false) {
+	const role=mode==='member'?'member':'controller';
+ const c=card(mode==='controller'?msg("settings.builtInDERPNodeConfiguration"):msg("settings.localDERPNodeConfiguration"));
  const q=s.saved;
  c.append(el('p',msg("settings.publicPortsAreClientEndpointsListenerAddressesAreThe"),'muted'));
- const read=data=>({role,hostname:data.get('hostname'),derp_listen:data.get('derp_listen'),stun_listen:data.get('stun_listen'),tls_mode:data.get('tls_mode'),cert_mode:data.get('cert_mode'),derp_port:Number(data.get('derp_port')),stun_port:Number(data.get('stun_port')),max_budget_bps:Math.round(Number(data.get('limit'))*1000000),logging_level:data.get('logging_level')});
+ const read=data=>({mode,role,hostname:data.get('hostname'),derp_listen:data.get('derp_listen'),stun_listen:data.get('stun_listen'),tls_mode:data.get('tls_mode'),cert_mode:data.get('cert_mode'),derp_port:Number(data.get('derp_port')),stun_port:Number(data.get('stun_port')),max_budget_bps:Math.round(Number(data.get('limit'))*1000000),logging_level:data.get('logging_level')});
  const f=form(c,initial?msg("settings.saveInitialSettings2"):msg("settings.saveConfiguration"),async data=>{
   const settings=read(data);settings.hostname=settings.hostname.trim();await api('/local/settings','POST',settings);
   if(initial&&!(settings.tls_mode==='passthrough'&&settings.cert_mode==='manual')){await api('/local/apply','POST',{});if(!f.isConnected)return;f.dirty=false;history.replaceState(null,'','#member');await session();}
@@ -488,18 +492,47 @@ function localConfigForm(s,role,initial=false) {
 async function bootstrap(){
  const s=await api('/local/status');
  page(msg("nav.initialSetup"),msg("settings.chooseThisInstanceSRoleEachInstanceHasIts"));
- const chooser=card(msg("settings.chooseRole"));
- chooser.append(actions(button(msg("settings.configureAsController"),()=>{document.querySelectorAll('#content .card').forEach(c=>{if(c!==chooser)c.remove();});localConfigForm(s,'controller',true);}),button(msg("settings.joinAnExistingCluster"),()=>{document.querySelectorAll('#content .card').forEach(c=>{if(c!==chooser)c.remove();});localConfigForm(s,'member',true);})));
- if(s.saved.role!=='setup')localConfigForm(s,s.saved.role,true);
+ const chooser=card(msg("mode.choose")),labels=modeLabels(),choices=el('div',undefined,'grid');chooser.append(choices);
+ for(const [mode,hint]of [['standalone',msg("mode.standaloneHint")],['controller',msg("mode.controllerHint")],['member',msg("mode.memberHint")]]){const choice=el('div');choice.append(button(labels[mode],()=>{if(!canDiscardEdits())return;document.querySelectorAll('#content .card').forEach(c=>{if(c!==chooser)c.remove();});localConfigForm(s,mode,true);}),el('p',hint,'muted'));choices.append(choice);}
+ if(s.saved.mode)localConfigForm(s,s.saved.mode,true);
  const extra=el('details',undefined,'state-disclosure');extra.append(el('summary',msg("settings.viewSavedConfiguration")));$('content').append(extra);extra.append(el('p',msg("settings.localRoleHostname",s.saved.role,s.saved.hostname||msg("settings.notConfigured2")),'muted'));
 }
 
-async function localSettings(){page(msg("nav.localSettings2"),msg("settings.saveThenApplySeparatelyApplyingRestartsTheLocalRelay"));const s=await api('/local/status');localApplication(s);localConfigForm(s,s.role);}
+async function localSettings(){page(msg("nav.localSettings2"),msg("settings.saveThenApplySeparatelyApplyingRestartsTheLocalRelay"));const s=await api('/local/status');localApplication(s);localConfigForm(s,s.mode);await modeSwitchPanel(s);}
+
+function modeLabels(){return {standalone:msg("mode.standalone"),controller:msg("mode.controller"),member:msg("mode.member")};}
+function modeStages(){return {preparing:msg("mode.preparing"),revoking:msg("mode.revoking"),archiving:msg("mode.archiving"),activating:msg("mode.activating"),completed:msg("mode.completed"),failed:msg("mode.failed"),cancelled:msg("mode.cancelled")};}
+function modeDisabled(control,disabled=true){if(serverMode==='standalone'&&disabled){control.disabled=true;setLocalizedAttribute(control,'title',msg("mode.disabled"));setLocalizedAttribute(control,'aria-label',joinText(getText(control),' · ',msg("mode.disabled")));}return control;}
+
+async function modeSwitchPanel(local){
+ const generation=pageGeneration,resources=serverRole==='controller'?await Promise.all([api('/nodes'),api('/tailnets'),api('/grants')]):[[],[],[]];
+ let state=await api('/local/mode-switch');if(generation!==pageGeneration)return;
+ const root=card(msg("mode.switch")),labels=modeLabels(),chooser=el('div'),progress=el('div');root.append(el('p',msg("mode.current",labels[local.mode]),'badge'),el('p',msg("mode.preserve"),'muted'),chooser,progress);
+ const f=form(chooser,msg("mode.switch"),async data=>{const target=data.get('target_mode'),archive=local.mode==='member'?data.get('archive_id')||'':'';const edits=[...$('content').querySelectorAll('form')].some(form=>form!==f&&form.dirty);if(edits)throw localizedError(msg("mode.pendingConfiguration"));if(!confirm(msg("mode.confirm",labels[target])))throw new DOMException('Keep mode','AbortError');await api('/local/mode-switch','POST',{target_mode:target,archive_id:archive,expected_revision:state.revision});});
+ f.successMessage=msg("mode.inProgress");
+ const target=select(f,'target_mode',msg("mode.target"),Object.entries(labels).filter(([mode])=>mode!==local.mode));
+ let archive;
+ if(local.mode==='member')archive=select(f,'archive_id',msg("mode.controllerData"),[['',msg("mode.fresh")],...(state.archive_id?[[state.archive_id,msg("mode.restore")]]:[])]);
+ const preview=el('div',undefined,'steps');f.append(preview);
+ const updatePreview=()=>{preview.replaceChildren();if(local.mode==='member'){preview.append(el('p',msg("mode.leave")));if(archive.value)preview.append(el('p',msg("mode.restoreHint")));}else if(target.value!=='controller'){const remotes=resources[0].filter(node=>node.id!==local.node_id);preview.append(el('p',msg("mode.revoke",remotes.length)));if(target.value==='member')preview.append(el('p',msg("mode.archive",resources[1].length,resources[0].length,resources[2].length)));}if(target.value==='standalone')preview.append(el('p',msg("mode.standaloneHint")));};
+ target.addEventListener('change',updatePreview);archive?.addEventListener('change',updatePreview);updatePreview();done(f);f.submitButton.disabled=local.pending_apply;
+ const draw=status=>{state=status;progress.replaceChildren();const busy=!!status.id&&!['completed','cancelled'].includes(status.stage);chooser.hidden=busy;if(!status.id)return;
+  progress.append(el('p',joinText(labels[status.from],' → ',labels[status.target],' · ',status.stage==='failed'&&status.resume_stage?msg("mode.failedAt",modeStages()[status.resume_stage]):modeStages()[status.stage]),'badge'));
+  if(status.leave_notified!==undefined)progress.append(el('p',status.leave_notified?msg("mode.leaveNotified"):msg("mode.leaveUnconfirmed"),'muted'));
+  if(status.stage==='failed'){progress.append(el('p',status.error,'persistent-error'));progress.append(button(msg("mode.retry"),async()=>{await api('/local/mode-switch','POST',{target_mode:status.target,archive_id:status.restore_id||'',expected_revision:status.revision});await render({preserveScroll:true});}));}
+  else if(busy)progress.append(el('p',msg("mode.inProgress"),'muted'));
+  if(status.nodes.length){const nodeStates={waiting:msg("mode.waiting"),applied:msg("mode.applied"),expired:msg("mode.expired"),failed:msg("mode.nodeFailed")};table(progress,[msg("nodes.node"),msg("common.status"),msg("nodes.revision2"),msg("mode.deadline")],status.nodes.map(node=>[node.display_name||node.domain||node.node_id,joinText(nodeStates[node.state],node.error?' · '+node.error:''),node.revoke_revision,node.expiry_known&&!['','0001-01-01T00:00:00Z'].includes(node.effective_until||'')?time(node.effective_until):msg("mode.waiting")]));}
+  if(['preparing','revoking'].includes(status.stage)||status.stage==='failed'&&['preparing','revoking'].includes(status.resume_stage))progress.append(button(msg("mode.cancel"),async()=>{await api('/local/mode-switch/'+status.id+'/cancel','POST',{expected_revision:status.revision});await render({preserveScroll:true});}));
+ };
+ draw(state);
+ if(state.id&&!['completed','cancelled'].includes(state.stage))limitedRefresh(root,async()=>{try{const next=await api('/local/mode-switch');if(!root.isConnected)return false;draw(next);return !['completed','cancelled','failed'].includes(next.stage);}catch(error){if(error.status===401){notice(msg("mode.signInAgain"));await session();return false;}throw error;}});
+}
 
 async function member(){
  const controller=serverRole==='controller';
  page(controller?msg("nodes.builtInNode"):msg("nav.localNode2"),controller?msg("settings.manageTheDERPNodeRunningWithTheControllerUnregistering"):msg("settings.manageThisNodeSClusterConnectionAndLocalConfiguration"));
  const s=await api('/local/status'),c=localState(s);
+ if(s.registration_error)c.append(el('p',msg("mode.registrationError",s.registration_error),'persistent-error'));
  c.append(button(msg("nav.localSettings2"),()=>{location.hash='local';}));
  if(s.qos){const rules=card(msg("settings.controllerBandwidthRules"));ruleSummary(rules,s.qos);table(rules,['Tailnet',msg("bandwidth.group"),msg("settings.weight"),msg("bandwidth.hardLimit")],s.qos.tailnets.map(t=>[shortIdentity(t.tailnet_id),t.group==='owner'?msg("bandwidth.ownerGroup"):msg("bandwidth.sharedGroup"),t.weight,t.max_bps?t.max_bps/1000000+' Mbps':msg("bandwidth.noAdditionalLimit")]));}
  if(s.joined){table(c,[msg("settings.controllerAddress"),msg("settings.clusterID"),msg("settings.nodeID")],[[s.controller_url,s.cluster_id,s.node_id]]);c.append(button(controller?msg("settings.unregisterLocalNode"):msg("settings.leaveCluster"),async()=>{if(!confirm(controller?msg("settings.unregisterThisClosesLocalDERPConnectionsAndClearsDevice",s.active.hostname):msg("settings.leaveThisClosesLocalDERPConnectionsAndClearsDevice",s.active.hostname)))return;const result=await api('/local/leave','POST',{});await render();notice(controller?msg("settings.localNodeUnregistered"):result.released?msg("settings.leftClusterControllerReleasedTheNode"):msg("settings.leftLocallyTheControllerHasNotConfirmedReleaseReissue"));},'danger'));}
@@ -600,7 +633,7 @@ async function render(options={}){
  document.body.classList.remove('nav-open');$('nav-toggle').setAttribute('aria-expanded','false');
  try{await views[name]();if(generation!==pageGeneration)return;if(serverRole==='controller'&&(actor.role==='admin'||actor.role==='provider')){const grants=await api('/grants');const link=document.querySelector('a[href="#requests"]'),count=grants.filter(g=>g.node_owner_id===actor.id&&g.state==='requested').length;setText(link,msg("nav.incomingRequests",count?' · '+count:''));}const selected=address.params.get('node');if(selected&&['nodes','directory'].includes(name)){const entry=visibleNodes.get(selected);if(entry)await openNode(entry.node);else{const c=card(msg("nodes.cannotOpenNode"));c.append(el('p',msg("nodes.thisNodeIsNotVisibleHasBeenDeletedOr"),'muted'),button(msg("nodes.backToList"),()=>updatePageParams({node:null},true)));}}if(generation!==pageGeneration)return;if(options.preserveScroll&&!changed)window.scrollTo(0,scrollY);else window.scrollTo(0,0);if(options.focusResource)document.getElementById(options.focusResource)?.focus();return generation===pageGeneration;}catch(e){if(e.name==='AbortError')return;persistentError($('content'),errorText(e),()=>render());if(e.status===401)await session();}finally{if(generation===pageGeneration)$('content').querySelectorAll('.page-loading').forEach(n=>n.remove());}
 }
-async function session(){try{const result=await api('/session');actor=result.actor;csrf=result.csrf_token;serverRole=result.server_role;}catch(e){actor=csrf=serverRole=undefined;}const logged=!!actor;let needsSetup=false;if(!logged){try{needsSetup=(await api('/setup')).required;}catch(e){notice(errorText(e),true);}}document.body.classList.toggle('logged-in',logged);$('setup').hidden=logged||!needsSetup;$('login').hidden=logged||needsSetup;$('workspace').hidden=!logged;$('account').hidden=!logged;if(!logged)$('content').replaceChildren();if(logged){setText($('account-avatar'),actor.username.slice(0,2).toUpperCase());setText($('account-name'),actor.username);setText($('account-role'),actor.role==='admin'&&serverRole!=='controller'?msg("auth.nodeAdministrator"):roleNames[actor.role]);await render();}}
+async function session(){try{const result=await api('/session');actor=result.actor;csrf=result.csrf_token;serverRole=result.server_role;serverMode=result.mode;builtinNodeID=result.builtin_node_id;}catch(e){actor=csrf=serverRole=serverMode=builtinNodeID=undefined;}const logged=!!actor;let needsSetup=false;if(!logged){try{needsSetup=(await api('/setup')).required;}catch(e){notice(errorText(e),true);}}document.body.classList.toggle('logged-in',logged);$('setup').hidden=logged||!needsSetup;$('login').hidden=logged||needsSetup;$('workspace').hidden=!logged;$('account').hidden=!logged;if(!logged)$('content').replaceChildren();if(logged){setText($('account-avatar'),actor.username.slice(0,2).toUpperCase());setText($('account-name'),actor.username);setText($('account-role'),actor.role==='admin'&&serverRole!=='controller'?msg("auth.nodeAdministrator"):roleNames[actor.role]);await render();}}
 $('setup-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const data=new FormData(f);const body={username:data.get('username'),password:data.get('password')};if(body.password!==data.get('password_confirm')){notice(msg("auth.passwordsDoNotMatch"),true);return;}f.elements.password.value=f.elements.password_confirm.value='';const b=f.querySelector('button');b.disabled=true;try{await api('/setup','POST',body);await session();}catch(err){notice(errorText(err),true);if(err.status===409)await session();}finally{b.disabled=false;}});
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const data=new FormData(f);const body={username:data.get('username'),password:data.get('password')};f.elements.password.value='';const b=f.querySelector('button');b.disabled=true;try{await api('/login','POST',body);resourceScope='mine';userNames=new Map();const address=pageLocation(location.hash,'member');address.params.delete('scope');address.params.delete('node');history.replaceState(null,'','#'+address.name+(address.params.size?'?'+address.params.toString():''));await session();}catch(err){notice(errorText(err),true);}finally{b.disabled=false;}});
 $('logout').addEventListener('click',async()=>{try{await api('/logout','POST',{});++pageGeneration;clearTimeout(refreshTimer);actor=csrf=undefined;$('content').replaceChildren();await session();}catch(e){notice(errorText(e),true);}});

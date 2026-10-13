@@ -7,6 +7,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lsy223622/UniDERP/v2/internal/cluster"
 	"tailscale.com/types/key"
@@ -149,5 +150,33 @@ func TestStandaloneFirstAdministratorGetsPendingOwnGrant(t *testing.T) {
 	tailnet, err := s.AddTailnet(t.Context(), admin, "First own", "Tfirstown", OAuthCredential{"id", "secret"})
 	if err != nil || tailnet.LocalGrant == nil || tailnet.LocalGrant.State != "pending" {
 		t.Fatal("first administrator treated as another node owner", err, tailnet)
+	}
+}
+
+func TestStandaloneCannotApproveOrConfirmRemoteGrant(t *testing.T) {
+	for _, action := range []GrantAction{GrantApprove, GrantConfirm} {
+		t.Run(string(action), func(t *testing.T) {
+			s, admin, member, node, _, _ := registeredTestNode(t)
+			tailnet := randomToken()
+			policyTailnet(t, s, member.ID, tailnet, []identityKey{{NodePublic: key.NewNode().Public().String()}}, s.now())
+			grant, err := s.RequestGrant(t.Context(), member, node.ID, tailnet, 0, time.Time{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			actor := admin
+			if action == GrantConfirm {
+				grant, err = s.ApplyGrantAction(t.Context(), admin, grant.ID, grant.Revision, GrantApprove)
+				if err != nil {
+					t.Fatal(err)
+				}
+				actor = member
+			}
+			if err := s.ConfigureInstanceMode(t.Context(), "standalone", admin.ID, "local.example.com", ""); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.ApplyGrantAction(t.Context(), actor, grant.ID, grant.Revision, action); !errors.Is(err, ErrStandalone) {
+				t.Fatal("remote authorization changed in standalone mode", err)
+			}
+		})
 	}
 }

@@ -70,10 +70,12 @@ func newHTTPHandler(s *Store) *httpHandler {
 			return
 		}
 		writeJSON(w, struct {
-			Actor      Actor  `json:"actor"`
-			CSRF       string `json:"csrf_token"`
-			ServerRole string `json:"server_role"`
-		}{actor, hex.EncodeToString(tokenHash("uniderp-csrf:" + cookie.Value)), h.serverRole()})
+			Actor         Actor  `json:"actor"`
+			CSRF          string `json:"csrf_token"`
+			ServerRole    string `json:"server_role"`
+			Mode          string `json:"mode"`
+			BuiltinNodeID string `json:"builtin_node_id"`
+		}{actor, hex.EncodeToString(tokenHash("uniderp-csrf:" + cookie.Value)), h.serverRole(), h.serverMode(), h.builtinNodeID(r)})
 	})
 	h.mux.HandleFunc("POST /api/v1/users", func(w http.ResponseWriter, r *http.Request) {
 		actor := h.actor(r)
@@ -234,6 +236,10 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				httpError(w, err)
 				return
 			}
+			if h.local != nil && h.local.ModeSwitchFrozen() && r.URL.Path != "/api/v1/logout" && r.URL.Path != "/api/v1/local/mode-switch" && !strings.HasPrefix(r.URL.Path, "/api/v1/local/mode-switch/") {
+				httpError(w, ErrModeSwitch)
+				return
+			}
 		}
 	}
 	h.mux.ServeHTTP(w, r)
@@ -332,6 +338,12 @@ func httpError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	message := "request failed"
 	switch {
+	case errors.Is(err, ErrModeSwitch):
+		status = 409
+		message = ErrModeSwitch.Error()
+	case errors.Is(err, ErrStandalone):
+		status = 403
+		message = ErrStandalone.Error()
 	case errors.Is(err, ErrUnauthorized):
 		status = 401
 		message = ErrUnauthorized.Error()
@@ -354,6 +366,12 @@ func httpError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	body := map[string]string{"error": message}
+	if errors.Is(err, ErrModeSwitch) {
+		body["code"] = "mode_switch_in_progress"
+	}
+	if errors.Is(err, ErrStandalone) {
+		body["code"] = "standalone_disabled"
+	}
 	var input *InputError
 	if errors.As(err, &input) {
 		body["code"], body["field"] = input.Code, input.Field

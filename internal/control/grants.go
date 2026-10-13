@@ -107,6 +107,9 @@ func (s *Store) RequestGrant(ctx context.Context, actor Actor, node, tailnet str
 }
 
 func (s *Store) requestGrant(ctx context.Context, tx *sql.Tx, actor Actor, node, tailnet string, expected uint64, until time.Time) (Grant, error) {
+	if err := requireStandaloneNode(ctx, tx, node); err != nil {
+		return Grant{}, err
+	}
 	if expected >= math.MaxInt64 || (!until.IsZero() && !s.now().Before(until.Truncate(time.Second))) {
 		return Grant{}, ErrInvalid
 	}
@@ -210,6 +213,9 @@ func (s *Store) ApplyGrantAction(ctx context.Context, actor Actor, id string, ex
 		return Grant{}, ErrConflict
 	}
 	if action == GrantApprove || action == GrantConfirm {
+		if err := requireStandaloneNode(ctx, tx, g.NodeID); err != nil {
+			return Grant{}, err
+		}
 		enabled, err := grantResourcesEnabled(ctx, tx, g.NodeID, g.TailnetID)
 		if err != nil {
 			return Grant{}, err

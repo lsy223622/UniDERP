@@ -405,6 +405,9 @@ func (d *Daemon) handleRequest(ctx context.Context, request admin.Request) admin
 	case "derp.restart":
 		d.opMu.Lock()
 		defer d.opMu.Unlock()
+		if d.modeBusy.Load() {
+			return admin.Failure(control.ErrModeSwitch.Error())
+		}
 		if err := d.restartDerper(ctx); err != nil {
 			return admin.Failure(err.Error())
 		}

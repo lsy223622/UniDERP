@@ -6,12 +6,16 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/lsy223622/UniDERP/v2/internal/admin"
+	"github.com/lsy223622/UniDERP/v2/internal/cluster"
 	"github.com/lsy223622/UniDERP/v2/internal/config"
 	"github.com/lsy223622/UniDERP/v2/internal/control"
 )
@@ -123,6 +127,81 @@ func TestModeRestoreDoesNotReactivateRemote(t *testing.T) {
 	}
 	if _, err := d.loadModeArchive(t.Context(), archived.ArchiveID); err != nil {
 		t.Fatal("restore mutated immutable archive", err)
+	}
+}
+
+func TestModeSwitchCLIMutationsFrozen(t *testing.T) {
+	d, actor := modeTestDaemon(t, config.ModeController)
+	d.stopNodeControl()
+	var attempts atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { attempts.Add(1); w.WriteHeader(401) }))
+	defer server.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	client, err := cluster.NewEnrollmentClient(server.URL, d.activeConfig().Node.StateDir)
+	http.DefaultTransport = previous
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.nodeClient = client
+	if _, err := d.SwitchMode(t.Context(), actor, "member", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range []admin.Request{{Action: "derp.restart"}, {Action: "node.enroll", ControllerURL: nodeControllerURL(d.activeConfig()), EnrollmentCode: strings.Repeat("e", 64)}} {
+		response := d.handleRequest(t.Context(), request)
+		if response.OK || response.Error != control.ErrModeSwitch.Error() {
+			t.Errorf("CLI mutation not frozen: %s %v", request.Action, response)
+		}
+	}
+	if attempts.Load() != 0 {
+		t.Fatal("CLI enrollment contacted a controller during mode transition", attempts.Load())
+	}
+}
+
+func TestModeLegacyMemberSettingsKeepLogin(t *testing.T) {
+	d, _ := modeTestDaemon(t, config.ModeMember)
+	cfg := d.activeConfig()
+	previousPath := d.managementPath
+	if err := d.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(cfg.Storage.StateDir, "controller.sqlite")
+	if err := os.Rename(previousPath, legacyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(d.modeJournalPath()); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Mode = ""
+	if err := config.WriteAtomic(d.configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	d = restartModeTestDaemon(t, d.configPath)
+	h := control.NewLocalHTTPHandler(d.controllerStore, d)
+	r := httptest.NewRequest("POST", "https://mode.example.com/api/v1/login", strings.NewReader(`{"username":"mode-admin","password":"mode-test-password"}`))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cookie := w.Result().Cookies()[0]
+	status, err := d.Status(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SaveSettings(t.Context(), status.Saved); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.ApplySettings(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	r = httptest.NewRequest("GET", "https://mode.example.com/api/v1/session", nil)
+	r.AddCookie(cookie)
+	w = httptest.NewRecorder()
+	control.NewLocalHTTPHandler(d.controllerStore, d).ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatal("ordinary member settings invalidated administrator login", w.Code, w.Body.String())
 	}
 }
 

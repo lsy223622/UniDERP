@@ -27,14 +27,17 @@ type NodeRevocationProgress struct {
 }
 
 type ModeSwitchStatus struct {
-	ID        string                   `json:"id"`
-	From      string                   `json:"from"`
-	Target    string                   `json:"target"`
-	Stage     string                   `json:"stage"`
-	Revision  uint64                   `json:"revision"`
-	ArchiveID string                   `json:"archive_id,omitempty"`
-	Nodes     []NodeRevocationProgress `json:"nodes"`
-	Error     string                   `json:"error,omitempty"`
+	ID            string                   `json:"id"`
+	From          string                   `json:"from"`
+	Target        string                   `json:"target"`
+	Stage         string                   `json:"stage"`
+	Revision      uint64                   `json:"revision"`
+	ArchiveID     string                   `json:"archive_id,omitempty"`
+	RestoreID     string                   `json:"restore_id,omitempty"`
+	ResumeStage   string                   `json:"resume_stage,omitempty"`
+	LeaveNotified *bool                    `json:"leave_notified,omitempty"`
+	Nodes         []NodeRevocationProgress `json:"nodes"`
+	Error         string                   `json:"error,omitempty"`
 }
 
 func modeSwitchFrozen(ctx context.Context, tx *sql.Tx) (bool, error) {

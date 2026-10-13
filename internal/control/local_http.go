@@ -49,6 +49,11 @@ type CertificateStatus struct {
 
 type LocalBackend interface {
 	Role() string
+	Mode() string
+	ModeSwitchFrozen() bool
+	ModeSwitchStatus(context.Context, Actor) (ModeSwitchStatus, error)
+	SwitchMode(context.Context, Actor, string, string, uint64) (ModeSwitchStatus, error)
+	CancelModeSwitch(context.Context, Actor, string, uint64) error
 	Status(context.Context) (LocalStatus, error)
 	SaveSettings(context.Context, LocalSettings) error
 	ApplySettings(context.Context) error
@@ -70,6 +75,19 @@ func (h *httpHandler) serverRole() string {
 		return h.local.Role()
 	}
 	return "controller"
+}
+
+func (h *httpHandler) serverMode() string {
+	if h.local != nil {
+		return h.local.Mode()
+	}
+	return "controller"
+}
+
+func (h *httpHandler) builtinNodeID(r *http.Request) string {
+	var id string
+	_ = h.store.db.QueryRowContext(r.Context(), "SELECT value FROM settings WHERE key='builtin_node_id'").Scan(&id)
+	return id
 }
 
 func (h *httpHandler) mountLocal() {
@@ -96,6 +114,39 @@ func (h *httpHandler) mountLocal() {
 			return
 		}
 		writeJSON(w, status)
+	}))
+	h.mux.HandleFunc("GET /api/v1/local/mode-switch", admin(func(w http.ResponseWriter, r *http.Request) {
+		status, err := h.local.ModeSwitchStatus(r.Context(), h.actor(r))
+		if err != nil {
+			httpError(w, err)
+			return
+		}
+		writeJSON(w, status)
+	}))
+	h.mux.HandleFunc("POST /api/v1/local/mode-switch", admin(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Target    string `json:"target_mode"`
+			ArchiveID string `json:"archive_id"`
+			Expected  uint64 `json:"expected_revision"`
+		}
+		if !decodeRequest(w, r, &body) {
+			return
+		}
+		status, err := h.local.SwitchMode(r.Context(), h.actor(r), body.Target, body.ArchiveID, body.Expected)
+		if err != nil {
+			httpError(w, err)
+			return
+		}
+		writeJSON(w, status)
+	}))
+	h.mux.HandleFunc("POST /api/v1/local/mode-switch/{id}/cancel", admin(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Expected uint64 `json:"expected_revision"`
+		}
+		if !decodeRequest(w, r, &body) {
+			return
+		}
+		finish(w, h.local.CancelModeSwitch(r.Context(), h.actor(r), r.PathValue("id"), body.Expected))
 	}))
 	h.mux.HandleFunc("POST /api/v1/local/settings", admin(func(w http.ResponseWriter, r *http.Request) {
 		var body LocalSettings

@@ -28,6 +28,16 @@ func configRole(cfg config.Config) string {
 
 func (d *Daemon) Role() string { return configRole(d.activeConfig()) }
 
+func (d *Daemon) Mode() string {
+	cfg := d.activeConfig()
+	if cfg.SetupRequired {
+		return ""
+	}
+	return string(cfg.EffectiveMode())
+}
+
+func (d *Daemon) ModeSwitchFrozen() bool { return d.modeBusy.Load() }
+
 func localSettings(cfg config.Config) control.LocalSettings {
 	mode := string(cfg.EffectiveMode())
 	if cfg.SetupRequired {
@@ -254,6 +264,9 @@ func (d *Daemon) applyLocalConfig(ctx context.Context, cfg config.Config) error 
 	d.applyError = ""
 	d.mu.Unlock()
 	d.modeState.ActiveMode = cfg.EffectiveMode()
+	if !cfg.Controller.Enabled {
+		d.modeState.MemberDatabase = d.managementPath
+	}
 	if cfg.Controller.Enabled {
 		d.modeState.Listen = cfg.Controller.Listen
 	}

@@ -241,6 +241,13 @@ func managementDatabase(cfg config.Config) string {
 	return filepath.Join(cfg.Storage.StateDir, "controller.sqlite")
 }
 
+func (d *Daemon) managementDatabase(cfg config.Config) string {
+	if !cfg.Controller.Enabled && d.modeState.ActiveMode == config.ModeMember && d.modeState.MemberDatabase != "" {
+		return d.modeState.MemberDatabase
+	}
+	return managementDatabase(cfg)
+}
+
 func (d *Daemon) stopController() {
 	if d.controllerCancel != nil {
 		d.controllerCancel()
@@ -250,7 +257,7 @@ func (d *Daemon) stopController() {
 }
 
 func (d *Daemon) replaceManagementStore(ctx context.Context, cfg config.Config, actorID string) error {
-	path := managementDatabase(cfg)
+	path := d.managementDatabase(cfg)
 	if path == d.managementPath {
 		return nil
 	}

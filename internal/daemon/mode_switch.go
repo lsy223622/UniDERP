@@ -17,10 +17,11 @@ import (
 )
 
 type instanceModeState struct {
-	ActiveMode config.RunMode `json:"active_mode"`
-	Listen     string         `json:"listen"`
-	ArchiveID  string         `json:"archive_id,omitempty"`
-	Operation  *modeOperation `json:"operation,omitempty"`
+	ActiveMode     config.RunMode `json:"active_mode"`
+	Listen         string         `json:"listen"`
+	ArchiveID      string         `json:"archive_id,omitempty"`
+	MemberDatabase string         `json:"member_database,omitempty"`
+	Operation      *modeOperation `json:"operation,omitempty"`
 }
 
 type modeOperation struct {
@@ -100,6 +101,13 @@ func (d *Daemon) ModeSwitchStatus(ctx context.Context, actor control.Actor) (con
 		return control.ModeSwitchStatus{From: string(d.activeConfig().EffectiveMode()), Nodes: []control.NodeRevocationProgress{}, ArchiveID: d.modeState.ArchiveID}, nil
 	}
 	status := d.modeState.Operation.Status
+	status.RestoreID = d.modeState.Operation.RestoreID
+	if status.Stage == "failed" {
+		status.ResumeStage = d.modeState.Operation.Phase
+	}
+	if status.ArchiveID == "" {
+		status.ArchiveID = d.modeState.ArchiveID
+	}
 	status.Nodes = append([]control.NodeRevocationProgress{}, status.Nodes...)
 	return status, nil
 }
@@ -414,6 +422,9 @@ func (d *Daemon) stepModeSwitch(ctx context.Context) error {
 		}
 		previousMode, previousPhase, previousStatus := d.modeState.ActiveMode, op.Phase, op.Status
 		d.modeState.ActiveMode = op.Target.EffectiveMode()
+		if !op.Target.Controller.Enabled {
+			d.modeState.MemberDatabase = d.managementPath
+		}
 		if err := d.modePhase("completed"); err != nil {
 			d.modeState.ActiveMode, op.Phase, op.Status = previousMode, previousPhase, previousStatus
 			return err
@@ -453,6 +464,8 @@ func (d *Daemon) stopModeMembership(ctx context.Context) error {
 		if previous.Token != "" && !op.Base.Controller.Enabled {
 			notifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			op.LeaveNotified = d.nodeClient.Release(notifyCtx, previous) == nil
+			notified := op.LeaveNotified
+			op.Status.LeaveNotified = &notified
 			cancel()
 		}
 	}

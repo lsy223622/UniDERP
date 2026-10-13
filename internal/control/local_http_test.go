@@ -9,10 +9,26 @@ import (
 )
 
 type localTestBackend struct {
+	mode        string
+	frozen      bool
 	role        string
 	writes      int
 	err         error
 	certificate CertificateStatus
+}
+
+func (b *localTestBackend) Mode() string           { return b.mode }
+func (b *localTestBackend) ModeSwitchFrozen() bool { return b.frozen }
+func (b *localTestBackend) ModeSwitchStatus(context.Context, Actor) (ModeSwitchStatus, error) {
+	return ModeSwitchStatus{ID: "test-switch", Stage: "revoking", Revision: 7, Nodes: []NodeRevocationProgress{}}, b.err
+}
+func (b *localTestBackend) SwitchMode(context.Context, Actor, string, string, uint64) (ModeSwitchStatus, error) {
+	b.writes++
+	return ModeSwitchStatus{ID: "test-switch", Stage: "preparing", Revision: 1}, b.err
+}
+func (b *localTestBackend) CancelModeSwitch(context.Context, Actor, string, uint64) error {
+	b.writes++
+	return b.err
 }
 
 func (b *localTestBackend) Role() string { return b.role }
@@ -66,6 +82,49 @@ func TestLocalCertificateStatusContainsNoSecrets(t *testing.T) {
 		if strings.Contains(w.Body.String(), secret) {
 			t.Fatal("secret in certificate status")
 		}
+	}
+}
+
+func TestModeSwitchHTTPPermissionsAndCSRF(t *testing.T) {
+	s, _, _ := nodeTestStore(t)
+	backend := &localTestBackend{role: "controller", mode: "controller"}
+	h := NewLocalHTTPHandler(s, backend)
+	admin, csrf := loginTest(t, h, "admin")
+	member, memberCSRF := loginTest(t, h, "alice")
+	for _, method := range []string{"GET", "POST"} {
+		w := accountRequest(h, member, memberCSRF, method, "/api/v1/local/mode-switch", map[string]any{"target_mode": "member", "expected_revision": 0})
+		if w.Code != 403 {
+			t.Fatal("ordinary member can change local mode", method, w.Code)
+		}
+	}
+	body := map[string]any{"target_mode": "member", "expected_revision": 0}
+	if w := accountRequest(h, admin, "", "POST", "/api/v1/local/mode-switch", body); w.Code != 403 || backend.writes != 0 {
+		t.Fatal("mode switch bypassed CSRF", w.Code, backend.writes)
+	}
+	if w := accountRequest(h, admin, csrf, "GET", "/api/v1/local/mode-switch", nil); w.Code != 200 {
+		t.Fatal("administrator cannot inspect switch progress", w.Code, w.Body.String())
+	}
+	if w := accountRequest(h, admin, csrf, "POST", "/api/v1/local/mode-switch", body); w.Code != 200 || backend.writes != 1 {
+		t.Fatal("administrator switch did not use local coordinator", w.Code, backend.writes)
+	}
+	if w := accountRequest(h, admin, csrf, "POST", "/api/v1/local/mode-switch/test-switch/cancel", map[string]int{"expected_revision": 7}); w.Code != 200 || backend.writes != 2 {
+		t.Fatal("administrator cannot cancel revocation", w.Code, backend.writes)
+	}
+}
+
+func TestModeSwitchHTTPFreezesFreshStoreMutations(t *testing.T) {
+	s, _, _ := nodeTestStore(t)
+	backend := &localTestBackend{role: "controller", frozen: true}
+	h := NewLocalHTTPHandler(s, backend)
+	admin, csrf := loginTest(t, h, "admin")
+	for _, path := range []string{"/api/v1/users", "/api/v1/nodes", "/api/v1/local/settings", "/api/v1/local/register"} {
+		w := accountRequest(h, admin, csrf, "POST", path, map[string]string{})
+		if w.Code != 409 || !strings.Contains(w.Body.String(), `"code":"mode_switch_in_progress"`) || backend.writes != 0 {
+			t.Fatal("instance freeze absent on switched Store", path, w.Code, w.Body.String())
+		}
+	}
+	if w := accountRequest(h, admin, csrf, "GET", "/api/v1/local/status", nil); w.Code != 200 {
+		t.Fatal("freeze prevented management status", w.Code)
 	}
 }
 

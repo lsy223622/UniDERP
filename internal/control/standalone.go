@@ -17,6 +17,29 @@ type LocalGrantResult struct {
 
 type instanceMode struct{ Mode, Owner, Domain, NodeID string }
 
+var ErrStandalone = errors.New("disabled in standalone mode")
+
+func requireStandaloneNode(ctx context.Context, tx *sql.Tx, id string) error {
+	mode, err := readInstanceMode(ctx, tx)
+	if err != nil || mode.Mode != "standalone" {
+		return err
+	}
+	if mode.NodeID != "" {
+		if mode.NodeID == id {
+			return nil
+		}
+		return ErrStandalone
+	}
+	var domain, owner string
+	if err := tx.QueryRowContext(ctx, "SELECT domain,owner_id FROM nodes WHERE id=?", id).Scan(&domain, &owner); err != nil {
+		return err
+	}
+	if domain != mode.Domain || owner != mode.Owner {
+		return ErrStandalone
+	}
+	return nil
+}
+
 func readInstanceMode(ctx context.Context, tx *sql.Tx) (instanceMode, error) {
 	var mode instanceMode
 	rows, err := tx.QueryContext(ctx, "SELECT key,value FROM settings WHERE key IN ('instance_mode','builtin_owner_id','builtin_domain','builtin_node_id')")
