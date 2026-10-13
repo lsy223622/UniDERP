@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Adds Standalone, Controller and Member instance modes, with three initial
+  setup choices and a recoverable local-administrator switching workflow.
+- Revokes remote permissions before leaving controller mode, waits for
+  applied empty policies or proven historical expiry, and seals matching
+  controller data and keys for an explicit restore choice.
+- Prepares the standalone local node and grants newly added owner Tailnets
+  local access, with explicit partial-result retries and no revival of
+  revoked grants. Adds Chinese and English mode progress and restrictions.
+
 ## [2.1.0] - 2026-10-12
 
 - Adds complete Simplified Chinese and English Web console text, including
