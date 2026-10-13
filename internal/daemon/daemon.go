@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lsy223622/UniDERP/v2/internal/admin"
@@ -70,6 +71,8 @@ type Daemon struct {
 	healthServer         *http.Server
 	healthListener       net.Listener
 	controllerStore      *control.Store
+	managementHandler    atomic.Value
+	managementPath       string
 	controllerServer     *http.Server
 	controllerListener   net.Listener
 	managementServer     *http.Server

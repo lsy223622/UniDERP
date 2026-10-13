@@ -18,6 +18,7 @@ import (
 )
 
 type Store struct {
+	path             string
 	db               *sql.DB
 	credentialAEAD   cipher.AEAD
 	apiClient        *http.Client
@@ -63,7 +64,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db, now: time.Now, identityRequests: make(chan struct{}, 4), policyStreams: make(map[string]*nodeControlStream)}
+	s := &Store{path: abs, db: db, now: time.Now, identityRequests: make(chan struct{}, 4), policyStreams: make(map[string]*nodeControlStream)}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err

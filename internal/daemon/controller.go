@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 )
 
 func (d *Daemon) startManagement(cfg config.Config) error {
-	database, listen := filepath.Join(cfg.Storage.StateDir, "controller.sqlite"), "127.0.0.1:3341"
+	database, listen := managementDatabase(cfg), "127.0.0.1:3341"
 	if cfg.Controller.Enabled {
 		database, listen = cfg.Controller.Database, cfg.Controller.Listen
 	}
@@ -26,12 +25,13 @@ func (d *Daemon) startManagement(cfg config.Config) error {
 		return fmt.Errorf("open controller database: %w", err)
 	}
 	d.controllerStore = store
+	d.managementPath = database
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return fmt.Errorf("listen controller: %w", err)
 	}
 	d.controllerListener = listener
-	controller := control.NewLocalHTTPHandler(store, d)
+	d.managementHandler.Store(control.NewLocalHTTPHandler(store, d))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/cluster/v1/domain-challenge/") {
 			d.mu.RLock()
@@ -44,7 +44,7 @@ func (d *Daemon) startManagement(cfg config.Config) error {
 			}
 			return
 		}
-		controller.ServeHTTP(w, r)
+		d.managementHandler.Load().(http.Handler).ServeHTTP(w, r)
 	})
 	d.controllerServer = &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 64 << 10}
 	go func() {
@@ -72,6 +72,12 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 	if cfg.SetupRequired {
 		return nil
 	}
+	if !cfg.Controller.Enabled || managementDatabase(cfg) != d.managementPath {
+		d.stopController()
+	}
+	if err := d.replaceManagementStore(ctx, cfg, ""); err != nil {
+		return err
+	}
 	if cfg.Controller.Enabled && d.controllerCancel == nil {
 		if err := d.controllerStore.EnableIdentity(cfg.Controller.KeyFile); err != nil {
 			return err
@@ -83,9 +89,10 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 		d.controllerCancel = cancel
 		done := make(chan struct{})
 		d.controllerDone = done
+		store := d.controllerStore
 		go func() {
 			defer close(done)
-			if err := d.controllerStore.RunIdentitySync(syncCtx); err != nil {
+			if err := store.RunIdentitySync(syncCtx); err != nil {
 				d.reportFatal(err)
 			}
 		}()
@@ -115,6 +122,8 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 }
 
 func (d *Daemon) controllerAdmin(ctx context.Context, request admin.Request) admin.Response {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
 	if d.controllerStore == nil || d.Role() != "controller" {
 		return admin.Failure("controller is not enabled")
 	}

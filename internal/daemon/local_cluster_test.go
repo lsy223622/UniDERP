@@ -20,6 +20,9 @@ import (
 
 func TestWebLeaveOfflineStopsRelayBeforeReturning(t *testing.T) {
 	d := localTestDaemon(t, true)
+	if _, err := d.controllerStore.InitializeAdmin(t.Context(), "localadmin", "long-password-123"); err != nil {
+		t.Fatal(err)
+	}
 	d.derper = &daemonFakeProcess{}
 	settings, _ := d.Status(t.Context())
 	local := settings.Saved
@@ -143,6 +146,9 @@ func TestWebRegisterLocalReplacesRejectedPendingCode(t *testing.T) {
 
 func TestWebJoinUsesProofAndRetriesPendingReceipt(t *testing.T) {
 	d := localTestDaemon(t, true)
+	if _, err := d.controllerStore.InitializeAdmin(t.Context(), "localadmin", "long-password-123"); err != nil {
+		t.Fatal(err)
+	}
 	d.derper = &daemonFakeProcess{}
 	var challenge cluster.NodeChallenge
 	var attempts int
