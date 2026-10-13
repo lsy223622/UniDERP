@@ -111,7 +111,7 @@ func (d *Daemon) archiveController(ctx context.Context, id string) (modeArchive,
 	if err := d.controllerStore.Snapshot(ctx, filepath.Join(stage, "controller.sqlite")); err != nil {
 		return modeArchive{}, err
 	}
-	clusterID, schema, err := control.InspectSnapshot(ctx, filepath.Join(stage, "controller.sqlite"))
+	clusterID, schema, err := control.InspectSnapshot(ctx, filepath.Join(stage, "controller.sqlite"), key)
 	if err != nil {
 		return modeArchive{}, err
 	}
@@ -186,7 +186,11 @@ func (d *Daemon) loadModeArchive(ctx context.Context, id string) (modeArchive, e
 	if databaseHash != archive.DatabaseSHA256 || keyHash != archive.KeySHA256 {
 		return modeArchive{}, errors.New("controller archive checksum mismatch")
 	}
-	clusterID, schema, err := control.InspectSnapshot(ctx, filepath.Join(root, "controller.sqlite"))
+	key, err := os.ReadFile(filepath.Join(root, "controller.key"))
+	if err != nil {
+		return modeArchive{}, err
+	}
+	clusterID, schema, err := control.InspectSnapshot(ctx, filepath.Join(root, "controller.sqlite"), key)
 	if err != nil {
 		return modeArchive{}, err
 	}

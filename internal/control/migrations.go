@@ -174,7 +174,10 @@ ALTER TABLE users_new RENAME TO users;`); err != nil {
  node_id TEXT PRIMARY KEY, domain TEXT NOT NULL DEFAULT '', display_name TEXT NOT NULL DEFAULT '',
  expiry_known INTEGER NOT NULL DEFAULT 0 CHECK(expiry_known IN (0,1)), effective_until INTEGER NOT NULL DEFAULT 0
 );
-INSERT INTO node_permission_history(node_id,domain,display_name) SELECT id,domain,display_name FROM nodes;
+INSERT INTO node_permission_history(node_id,domain,display_name,expiry_known)
+ SELECT n.id,n.domain,n.display_name,CASE WHEN n.public_key IS NULL
+ AND NOT EXISTS(SELECT 1 FROM node_policies p WHERE p.node_id=n.id)
+ AND NOT EXISTS(SELECT 1 FROM audit a WHERE a.resource_type='node' AND a.resource_id=n.id AND a.action='node.enroll') THEN 1 ELSE 0 END FROM nodes n;
 INSERT OR IGNORE INTO node_permission_history(node_id) SELECT DISTINCT a.resource_id FROM audit a WHERE a.resource_type='node' AND a.action='node.delete' AND EXISTS(SELECT 1 FROM audit b WHERE b.resource_id=a.resource_id AND b.action='node.enroll');
 CREATE TABLE mode_operations(id TEXT PRIMARY KEY,state_json BLOB NOT NULL,active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)));
 CREATE UNIQUE INDEX mode_operation_active ON mode_operations(active) WHERE active=1;

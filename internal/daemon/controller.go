@@ -93,17 +93,7 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 			return err
 		}
 		if !d.modeBusy.Load() {
-			syncCtx, cancel := context.WithCancel(ctx)
-			d.controllerCancel = cancel
-			done := make(chan struct{})
-			d.controllerDone = done
-			store := d.controllerStore
-			go func() {
-				defer close(done)
-				if err := store.RunIdentitySync(syncCtx); err != nil {
-					d.reportFatal(err)
-				}
-			}()
+			d.startControllerSync(ctx)
 		}
 	}
 	origin := cfg.Node.ControllerURL
@@ -131,6 +121,20 @@ func (d *Daemon) prepareRole(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	return d.configureModeStore(ctx, cfg)
+}
+
+func (d *Daemon) startControllerSync(ctx context.Context) {
+	syncCtx, cancel := context.WithCancel(ctx)
+	d.controllerCancel = cancel
+	done := make(chan struct{})
+	d.controllerDone = done
+	store := d.controllerStore
+	go func() {
+		defer close(done)
+		if err := store.RunIdentitySync(syncCtx); err != nil {
+			d.reportFatal(err)
+		}
+	}()
 }
 
 func (d *Daemon) configureModeStore(ctx context.Context, cfg config.Config) error {

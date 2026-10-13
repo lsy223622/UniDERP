@@ -112,6 +112,62 @@ func TestModeOfflineUnknownBlocks(t *testing.T) {
 	}
 }
 
+func TestModeLegacyUnusedEnrollmentCanSwitch(t *testing.T) {
+	s, admin, _ := nodeTestStore(t)
+	node, _, err := s.CreateNode(t.Context(), admin, "Unused", "unused.example.com", 443, 3478)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("DROP TABLE mode_operations; DROP TABLE node_permission_history; PRAGMA user_version=7"); err != nil {
+		t.Fatal(err)
+	}
+	path := s.path
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	status := beginModeRevocation(t, s, admin, "")
+	if len(status.Nodes) != 1 || status.Nodes[0].NodeID != node.ID || !status.Nodes[0].ExpiryKnown || !status.Nodes[0].EffectiveUntil.IsZero() {
+		t.Fatal("unused legacy enrollment has no completion path", status)
+	}
+	if _, err := s.ModeSwitch(t.Context(), admin); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishModeSwitch(t.Context(), admin, status.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestModeLegacyReleasedPermissionsStayUnknown(t *testing.T) {
+	s, admin, node, session, _, _ := modeRevocationFixture(t)
+	if err := s.ReleaseNode(t.Context(), session.Token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("DROP TABLE mode_operations; DROP TABLE node_permission_history; PRAGMA user_version=7"); err != nil {
+		t.Fatal(err)
+	}
+	path := s.path
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	status := beginModeRevocation(t, s, admin, "")
+	if len(status.Nodes) != 1 || status.Nodes[0].NodeID != node.ID || status.Nodes[0].ExpiryKnown {
+		t.Fatal("released legacy permissions were guessed safe", status)
+	}
+	if err := s.FinishModeSwitch(t.Context(), admin, status.ID); !errors.Is(err, ErrConflict) {
+		t.Fatal("unknown legacy authority completed", err)
+	}
+}
+
 func TestModeRetiredBuiltinDoesNotBlockRestoredController(t *testing.T) {
 	s, admin, builtin, _, _, _ := modeRevocationFixture(t)
 	if _, err := s.db.Exec("UPDATE node_permission_history SET expiry_known=0 WHERE node_id=?", builtin.ID); err != nil {

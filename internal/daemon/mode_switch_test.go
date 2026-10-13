@@ -472,6 +472,48 @@ func TestModeSwitchPreparationFailureKeepsAuthorizationFrozen(t *testing.T) {
 	}
 }
 
+func TestModeSwitchCompletionCannotBecomeUnrecoverable(t *testing.T) {
+	d, actor := modeTestDaemon(t, config.ModeController)
+	keyPath := d.activeConfig().Controller.KeyFile
+	keyBytes, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process := d.derper.(*daemonFakeProcess)
+	process.mu.Lock()
+	process.onReady = func() {
+		if err := os.WriteFile(keyPath, []byte("fault after role preparation"), 0600); err != nil {
+			t.Error(err)
+		}
+	}
+	process.mu.Unlock()
+	if _, err := d.SwitchMode(t.Context(), actor, "standalone", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		d.advanceModeSwitch(t.Context())
+	}
+	if err := os.WriteFile(keyPath, keyBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	status, err := d.ModeSwitchStatus(t.Context(), actor)
+	if err != nil || status.Stage != "completed" {
+		t.Fatal("completed activation became unrecoverable", err, status)
+	}
+	if err := d.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	d = restartModeTestDaemon(t, d.configPath)
+	status, err = d.ModeSwitchStatus(t.Context(), actor)
+	if err != nil || status.Stage != "completed" {
+		t.Fatal("completion did not survive restart", err, status)
+	}
+	if _, err := d.SwitchMode(t.Context(), actor, "controller", "", status.Revision); err != nil {
+		t.Fatal("could not continue after recovered completion", err)
+	}
+	finishModeTestSwitch(t, d, actor)
+}
+
 func TestModeSwitchPreparationFailureRestartClearsMembership(t *testing.T) {
 	d, actor := modeTestDaemon(t, config.ModeController)
 	d.stopNodeControl()

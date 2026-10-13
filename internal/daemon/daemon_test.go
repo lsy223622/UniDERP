@@ -210,6 +210,7 @@ type daemonFakeProcess struct {
 	exitErrs    map[<-chan struct{}]error
 	starts      int
 	startErr    error
+	onReady     func()
 	stopEntered chan struct{}
 	stopRelease chan struct{}
 }
@@ -233,7 +234,15 @@ func (p *daemonFakeProcess) Start(context.Context, config.ServerConfig, string, 
 	return nil
 }
 
-func (p *daemonFakeProcess) WaitReady(context.Context, config.ServerConfig) error { return nil }
+func (p *daemonFakeProcess) WaitReady(context.Context, config.ServerConfig) error {
+	p.mu.Lock()
+	onReady := p.onReady
+	p.mu.Unlock()
+	if onReady != nil {
+		onReady()
+	}
+	return nil
+}
 
 func (p *daemonFakeProcess) Running() bool {
 	p.mu.Lock()

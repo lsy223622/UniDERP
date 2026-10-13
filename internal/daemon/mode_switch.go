@@ -427,8 +427,8 @@ func (d *Daemon) stepModeSwitch(ctx context.Context) error {
 			return err
 		}
 		d.modeBusy.Store(false)
-		if err := d.prepareRole(d.runCtx, op.Target); err != nil {
-			return err
+		if op.Target.Controller.Enabled {
+			d.startControllerSync(d.runCtx)
 		}
 		if op.Target.EffectiveMode() == config.ModeStandalone {
 			d.prepareStandalone(ctx)

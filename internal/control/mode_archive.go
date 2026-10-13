@@ -2,6 +2,8 @@ package control
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"database/sql"
 	"errors"
 	"net/url"
@@ -196,7 +198,7 @@ func openSnapshot(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", u.String())
 }
 
-func InspectSnapshot(ctx context.Context, path string) (string, int, error) {
+func InspectSnapshot(ctx context.Context, path string, key []byte) (string, int, error) {
 	db, err := openSnapshot(path)
 	if err != nil {
 		return "", 0, err
@@ -213,6 +215,39 @@ func InspectSnapshot(ctx context.Context, path string) (string, int, error) {
 	}
 	if integrity != "ok" {
 		return "", 0, errors.New("invalid controller snapshot")
+	}
+	if len(key) != 32 {
+		return "", 0, errors.New("invalid controller key")
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", 0, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", 0, err
+	}
+	rows, err := db.QueryContext(ctx, "SELECT tailnet_id,encrypted FROM credentials WHERE length(encrypted)>0 UNION ALL SELECT 'enrollment:'||node_id,response_encrypted FROM enrollments WHERE length(response_encrypted)>0")
+	if err != nil {
+		return "", 0, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var aad string
+		var encrypted []byte
+		if err := rows.Scan(&aad, &encrypted); err != nil {
+			return "", 0, err
+		}
+		n := aead.NonceSize()
+		if len(encrypted) < n {
+			return "", 0, errors.New("controller archive key does not match its database")
+		}
+		if _, err := aead.Open(nil, encrypted[:n], encrypted[n:], []byte(aad)); err != nil {
+			return "", 0, errors.New("controller archive key does not match its database")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", 0, err
 	}
 	return id, version, nil
 }

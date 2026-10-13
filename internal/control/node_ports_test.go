@@ -101,8 +101,9 @@ func TestVersionFiveNodesMigrateDefaultPublicPorts(t *testing.T) {
 	}
 	_, err = db.Exec(`CREATE TABLE users(id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE COLLATE NOCASE,role TEXT NOT NULL CHECK(role IN ('admin','member')),enabled INTEGER NOT NULL,password_hash BLOB NOT NULL,session_version INTEGER NOT NULL DEFAULT 1);
 INSERT INTO users VALUES('owner','owner','member',1,'hash',1);
-CREATE TABLE nodes(id TEXT PRIMARY KEY,owner_id TEXT,domain TEXT,display_name TEXT,region_id INTEGER,state TEXT,last_heartbeat INTEGER,last_error TEXT,enabled INTEGER);
-INSERT INTO nodes VALUES('node','owner','relay.example.com','Relay',902,'registered',123,'',1);
+CREATE TABLE nodes(id TEXT PRIMARY KEY,owner_id TEXT,domain TEXT,display_name TEXT,region_id INTEGER,state TEXT,last_heartbeat INTEGER,last_error TEXT,enabled INTEGER,public_key BLOB);
+INSERT INTO nodes VALUES('node','owner','relay.example.com','Relay',902,'registered',123,'',1,NULL);
+CREATE TABLE node_policies(node_id TEXT PRIMARY KEY);
 CREATE TABLE audit(id INTEGER PRIMARY KEY,actor_id TEXT NOT NULL,owner_id TEXT NOT NULL,resource_type TEXT NOT NULL,resource_id TEXT NOT NULL,action TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 PRAGMA user_version=5;`)
