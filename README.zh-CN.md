@@ -164,7 +164,7 @@ CA bundle 路径必须存在于代理所在的容器或主机。Nginx 默认不�
 
 ## 加入成员中继
 
-在成员主机将 [config.node.example.yaml](config.node.example.yaml) 复制到 `node-data/config.yaml`，设置 `node.controller_url` 为主控 HTTPS origin，`server.hostname` 为成员自己的公网域名。按主控相同方式设置 `node-data` 的 UID 10001 和严格权限，启动 [docker-compose.node.example.yaml](docker-compose.node.example.yaml)。配置成员 TLS/代理和 STUN。各 Compose 示例用于各自的主机；同机部署时自行调整端口。
+在成员主机将 [config.node.example.yaml](config.node.example.yaml) 复制到 `data/config.yaml`，设置 `node.controller_url` 为主控 HTTPS origin，`server.hostname` 为成员自己的公网域名。按主控相同方式设置 `data` 的 UID 10001 和严格权限，再启动统一的 [docker-compose.example.yaml](docker-compose.example.yaml)。主控和成员部署共用此 Compose 文件，每台主机使用自己的 `data` 目录。成员 TLS/代理和 STUN 按上文配置；同机部署时调整容器名和端口。
 
 节点提供者在“我的节点”中为准确域名创建资源，取得有效 30 分钟的一次性注册码。在成员主机写入受保护的 `/data/enrollment-code`：
 

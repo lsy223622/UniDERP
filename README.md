@@ -164,7 +164,7 @@ The CA bundle path must exist inside the proxy's container or host. Nginx defaul
 
 ## Join a relay
 
-On the member host, copy [config.node.example.yaml](config.node.example.yaml) to `node-data/config.yaml`; set `node.controller_url` to the controller's HTTPS origin and `server.hostname` to the member's own public domain. Prepare `node-data` with the same UID 10001 and restrictive permissions, then start [docker-compose.node.example.yaml](docker-compose.node.example.yaml). Configure member TLS/proxy and STUN as above. Each example is intended for its own host; adjust ports if colocating services.
+On the member host, copy [config.node.example.yaml](config.node.example.yaml) to `data/config.yaml`; set `node.controller_url` to the controller's HTTPS origin and `server.hostname` to the member's own public domain. Prepare `data` with the same UID 10001 and restrictive permissions, then start [docker-compose.example.yaml](docker-compose.example.yaml). Controller and member deployments use the same Compose file, each with its own `data` directory. Configure member TLS/proxy and STUN as above; adjust the container name and ports if colocating services.
 
 In **My nodes**, the provider creates a relay resource for that exact domain and obtains a single-use enrollment code valid for 30 minutes. Put the code in a protected `/data/enrollment-code` file on the member host:
 
