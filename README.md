@@ -78,9 +78,12 @@ Navigation has an independent Overview and Controller, Nodes and Tailnet groups,
 
 `tls_mode: external` means the reverse proxy terminates TLS and derper receives HTTP. `tls_mode: passthrough` means derper terminates TLS and loads its own certificate; clients may connect directly or through a TCP proxy that forwards TLS unchanged. The name refers to passing TLS through an upstream proxy to derper.
 
-The external profile publishes DERP HTTP at `127.0.0.1:3377` and independent management HTTP at `127.0.0.1:3378`. Set `server.management.listen: ":3378"` in existing configurations to enable this second listener; new bootstrap configurations already enable it. A host reverse proxy terminates HTTPS, preserves HTTP/1.1 upgrades, and streams long-lived control responses. Route management paths directly to 3378 so the console works before relay setup and while the relay is stopped. In an existing Nginx TLS server:
+The external profile publishes DERP HTTP at `127.0.0.1:3377` and independent management HTTP at `127.0.0.1:3378`. Set `server.management.listen: ":3378"` in existing configurations to enable this second listener; new bootstrap configurations already enable it. A host reverse proxy terminates HTTPS, preserves HTTP/1.1 upgrades, and streams long-lived control responses. Route management paths directly to 3378 so the console works before relay setup and while the relay is stopped. The UI is served at `/manage/`, so redirect the exact path `/manage` there before it can fall through to the DERP route. In an existing Nginx TLS server:
 
 ```nginx
+location = /manage {
+    return 301 /manage/;
+}
 location ~ ^/(manage|api/v1|cluster/v1)/ {
     proxy_pass http://127.0.0.1:3378;
     proxy_http_version 1.1;

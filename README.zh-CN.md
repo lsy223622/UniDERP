@@ -78,9 +78,12 @@ docker exec uniderp uniderp controller init \
 
 `tls_mode: external` 由反向代理终止 TLS，derper 接收 HTTP。`tls_mode: passthrough` 由 derper 自己终止 TLS 并加载证书，客户端可直连，或通过透传 TLS 的 TCP 代理连接。这里的 passthrough 指上游代理将 TLS 传给 derper。
 
-external 示例将 DERP HTTP 发布到 `127.0.0.1:3377`，独立管理 HTTP 发布到 `127.0.0.1:3378`。已有配置需加上 `server.management.listen: ":3378"`；首次设置配置已启用它。主机反代负责 HTTPS、HTTP/1.1 upgrade 和控制长连接。管理路径直接转发到 3378，保证初始设置以及中继停止时网页仍可使用。已有 Nginx TLS server 可采用：
+external 示例将 DERP HTTP 发布到 `127.0.0.1:3377`，独立管理 HTTP 发布到 `127.0.0.1:3378`。已有配置需加上 `server.management.listen: ":3378"`；首次设置配置已启用它。主机反代负责 HTTPS、HTTP/1.1 upgrade 和控制长连接。管理路径直接转发到 3378，保证初始设置以及中继停止时网页仍可使用。应用只在 `/manage/` 提供管理页面，因此先将精确路径 `/manage` 重定向到 `/manage/`，避免它落入 DERP 默认路由。已有 Nginx TLS server 可采用：
 
 ```nginx
+location = /manage {
+    return 301 /manage/;
+}
 location ~ ^/(manage|api/v1|cluster/v1)/ {
     proxy_pass http://127.0.0.1:3378;
     proxy_http_version 1.1;
