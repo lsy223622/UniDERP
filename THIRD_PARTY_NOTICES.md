@@ -25,4 +25,11 @@ the SIL Open Font License 1.1. Source: <https://github.com/rsms/inter>.
 The license is included in [licenses/Inter-LICENSE.txt](licenses/Inter-LICENSE.txt)
 and in the runtime image under `/usr/share/licenses/uniderp/licenses/`.
 
+The management UI bundles `parseTree` and `createScanner` from Microsoft's
+`jsonc-parser` 3.3.1 under the MIT License for local policy editing.
+Source: <https://github.com/microsoft/node-jsonc-parser/tree/v3.3.1>.
+The license is included in [licenses/jsonc-parser-LICENSE.txt](licenses/jsonc-parser-LICENSE.txt).
+Bundle provenance and reproduction are recorded in
+[internal/control/ui/vendor/README.md](internal/control/ui/vendor/README.md).
+
 The rest of this repository is covered by the project license in `LICENSE`.
