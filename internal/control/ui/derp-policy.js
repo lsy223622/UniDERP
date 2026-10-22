@@ -32,16 +32,15 @@ var DerpPolicy=(()=>{
   const fraction=coefficient.split('.')[1]?.length||0;let power=BigInt(exponent)-BigInt(fraction),digits=coefficient.replace('.','').replace(/^0+/,'');
   if(!digits)return '0';while(digits.endsWith('0')){digits=digits.slice(0,-1);power++;}return (negative?'-':'')+digits+'e'+power;
  }
- function semantic(node,text,normalizeIDs=false,path=[]){
+ function semantic(node,text){
   if(node.type==='number')return 'n'+numeric(text.slice(node.offset,node.offset+node.length));
   if(node.type==='object'){
    const names=new Set(),parts=node.children.map(p=>{
     const name=p.children[0].value;if(names.has(name))fail('ambiguous');names.add(name);
-    const id=normalizeIDs&&name==='RegionID'&&(path.length===0||(path.length===2&&path[0]==='Nodes'));
-    return [name,id?'n0':semantic(p.children[1],text,normalizeIDs,[...path,name])];
+    return [name,semantic(p.children[1],text)];
    });parts.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);return 'o'+JSON.stringify(parts);
   }
-  if(node.type==='array')return 'a['+node.children.map((n,i)=>semantic(n,text,normalizeIDs,[...path,i])).join(',')+']';
+  if(node.type==='array')return 'a['+node.children.map(n=>semantic(n,text)).join(',')+']';
   return node.type+JSON.stringify(node.value);
  }
  function apply(text,edits){for(const e of edits.map((e,index)=>({...e,index})).sort((a,b)=>b.offset-a.offset||b.index-a.index))text=text.slice(0,e.offset)+e.text+text.slice(e.offset+e.length);return text;}
@@ -75,11 +74,6 @@ var DerpPolicy=(()=>{
    pending.push(entry);
   }
   for(const entry of pending){
-   // Recognize an earlier renumbered copy by content, never by its name or prefix.
-   if(retained.some(e=>{
-    if(e.id<900||e.id>999||e.value.type!=='object'||property(e.value,'RegionID')?.value!==e.id)return false;
-    const nodes=property(e.value,'Nodes');return nodes?.type==='array'&&nodes.children.every(n=>n.type==='object'&&property(n,'RegionID')?.value===e.id)&&semantic(e.value,source,true)===semantic(entry.value,incomingText,true);
-   })){summary.identical++;continue;}
    let target=entry.id;do{target=target===999?900:target+1;if(!occupied.has(target))break;}while(target!==entry.id);
    if(occupied.has(target))fail('full');occupied.set(target,entry);insert.push({...entry,target});summary.renumbered++;
   }

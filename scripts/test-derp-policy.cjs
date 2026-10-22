@@ -45,6 +45,10 @@ test('deduplicates same-ID semantic objects without rounding numeric extensions'
  const containers=map(900);containers.Regions[900].Extra=[];const old=region(900);old.Extra={};
  const distinct=merge(JSON.stringify({grants:[],derpMap:{Regions:{900:old}}}),containers);
  assert.equal(distinct.summary.identical,0);assert.equal(distinct.summary.renumbered,1);
+ const otherID=region(901);otherID.RegionCode='uniderp-900';
+ const collision=merge(JSON.stringify({grants:[],derpMap:{Regions:{900:region(900,'old.test'),901:otherID}}}),map(900));
+ assert.equal(collision.summary.added,1);assert.equal(collision.summary.renumbered,1);
+ assert.equal(json(collision.text).derpMap.Regions[902].RegionID,902);
 });
 
 test('reserves incoming free IDs before allocating collisions, skips nulls, updates all node IDs and wraps',()=>{
@@ -54,7 +58,6 @@ test('reserves incoming free IDs before allocating collisions, skips nulls, upda
  for(const id of [903,904])for(const node of regions[id].Nodes)assert.equal(node.RegionID,id);
  assert.equal(regions[902],null);assert.equal(result.summary.renumbered,2);
  assert.equal(merge(source,map(900,901,999)).text,result.text);
- assert.equal(merge(result.text,map(900,901,999)).text,result.text);
  const wrap=json(merge('{"grants":[],"derpMap":{"Regions":{"999":null}}}',map(999)).text);
  assert.equal(wrap.derpMap.Regions[900].RegionID,900);
 });
