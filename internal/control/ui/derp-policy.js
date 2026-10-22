@@ -51,7 +51,7 @@ var DerpPolicy=(()=>{
   if(!properties.length)return text;
   const eol=text.includes('\r\n')?'\r\n':'\n',base=indentAt(text,node.offset),first=node.children[0],indent=first?indentAt(text,first.offset):base+(text.includes('\n\t')?'\t':'  '),padding=indent.length>base.length?indent:base+'  ';
   const edits=[],last=node.children.at(-1);if(last&&commaAfter(text,last)===null)edits.push({offset:last.offset+last.length,length:0,text:','});
-  edits.push({offset:node.offset+node.length-1,length:0,text:eol+properties.map(([key,value])=>padding+JSON.stringify(key)+': '+value).join(','+eol)+eol+base});
+  edits.push({offset:node.offset+node.length-1,length:0,text:eol+properties.map(([key,value])=>padding+JSON.stringify(key)+': '+value.replaceAll('\n',eol+padding)).join(','+eol)+eol+base});
   return apply(text,edits);
  }
  function merge(source,map,{keepCustom=true,omitDefaultRegions}={}){
@@ -76,7 +76,10 @@ var DerpPolicy=(()=>{
   }
   for(const entry of pending){
    // Recognize an earlier renumbered copy by content, never by its name or prefix.
-   if(retained.some(e=>e.id>=900&&e.id<=999&&e.value.type==='object'&&semantic(e.value,source,true)===semantic(entry.value,incomingText,true))){summary.identical++;continue;}
+   if(retained.some(e=>{
+    if(e.id<900||e.id>999||e.value.type!=='object'||property(e.value,'RegionID')?.value!==e.id)return false;
+    const nodes=property(e.value,'Nodes');return nodes?.type==='array'&&nodes.children.every(n=>n.type==='object'&&property(n,'RegionID')?.value===e.id)&&semantic(e.value,source,true)===semantic(entry.value,incomingText,true);
+   })){summary.identical++;continue;}
    let target=entry.id;do{target=target===999?900:target+1;if(!occupied.has(target))break;}while(target!==entry.id);
    if(occupied.has(target))fail('full');occupied.set(target,entry);insert.push({...entry,target});summary.renumbered++;
   }

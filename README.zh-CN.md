@@ -179,7 +179,7 @@ docker exec uniderp-node uniderp node enroll \
 
 1. 在“我的 Tailnet”输入 Tailscale General 设置中的规范 `T...` Tailnet ID，以及只配置 `devices:core:read` 的 OAuth client secret。UniDERP 从 secret 自动提取 client ID，请求该只读 scope 并同步设备公钥。成功读取不能证明原始 OAuth client 没有其他权限，所有者需检查原始配置。参见 [Tailscale OAuth clients](https://tailscale.com/docs/features/oauth-clients) 和 [trust credential scopes](https://tailscale.com/docs/reference/trust-credentials)。
 2. 在“节点列表”为自己的 Tailnet 申请使用 DERP 节点。提供者在“收到的使用申请”批准后，申请人在“节点使用授权”确认生效；未确认不能放行设备。自己的 Tailnet 使用自己的节点直接生效。
-3. 导出该尾网 DERP map，将 `Regions` 合并到现有 Tailscale policy 的 `derpMap.Regions`。保留原有 ACL/grants、其他区域和默认 DERP 设置，并检查 900–999 的区域 ID 是否冲突。UniDERP 不自动修改 policy 或分发客户端配置。参见 [自定义 DERP 服务器](https://tailscale.com/docs/reference/derp-servers)。
+3. 在“我的 Tailnet → 显示 DERP map”复制、下载 map，或展开“合并到 Tailscale 配置”。粘贴当前完整的 JSON/HuJSON 策略，选择默认、自定义 DERP 选项，生成并复制完整结果，再到 Tailscale 检查并保存。工具仅在浏览器内处理策略，保留无关字段原文与注释；新增区域编号冲突时在 900–999 范围内自动顺延。替换自定义区域时仍保留 `null` 排除项和范围外的显式覆盖。UniDERP 不自动更新 Tailscale 策略。参见 [自定义 DERP 服务器](https://tailscale.com/docs/reference/derp-servers/custom-derp-servers)。
 
 map 公布仍有效的授权资源，使用各资源保存的公开 DERP TCP 和 STUN UDP 端口，默认分别为 443 和 3478。发现与授权分开：旧 map 条目不会赋予设备公钥权限。标准协议面向原版客户端，但本地 DERP library 测试不能替代真实尾网中的原版应用验证。
 

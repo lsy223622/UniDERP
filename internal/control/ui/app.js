@@ -157,6 +157,29 @@ function listFilters(kind){const c=el('form',undefined,'list-filters row'),param
 function listEmpty(parent,hasResources,message){const filtered=pageParams().get('q')||(pageParams().get('state')&&pageParams().get('state')!=='pending');parent.append(el('p',filtered?msg("common.noRecordsMatchTheseFilters"):message,'muted'));if(filtered)parent.append(button(msg("common.clearFilters"),()=>updatePageParams({q:null,state:null},true)));}
 function addFormCard(title,hasResources){const c=el('details',undefined,'card add-form');c.open=!hasResources;c.append(el('summary',title));c.addEventListener('toggle',()=>{if(c.open)c.querySelector('input')?.focus();});$('content').append(c);return c;}
 function directoryAction(g){return g?.state==='requested'?'wait':g?.state==='owner_approved'?'confirm':g?.state==='active'?'view':'request';}
+function policyMergeTool(parent){
+ const tool=el('details',undefined,'policy-merge');tool.append(el('summary',msg('policyMerge.title')));parent.append(tool);
+ const f=el('form');f.autocomplete='off';tool.append(f,el('p',msg('policyMerge.localOnly'),'muted'));
+ const sourceLabel=el('label',msg('policyMerge.source')),source=el('textarea');source.name='policy-source';source.spellcheck=false;source.autocomplete='off';sourceLabel.append(source);f.append(sourceLabel);
+ const omitLabel=el('label'),omit=el('input');omit.type='checkbox';omit.name='policy-omit';omitLabel.append(omit,el('span',msg('policyMerge.omit')));
+ const keepLabel=el('label'),keep=el('input');keep.type='checkbox';keep.name='policy-keep';keep.checked=true;keepLabel.append(keep,el('span',msg('policyMerge.keep')));f.append(omitLabel,keepLabel,el('p',msg('policyMerge.replaceScope'),'muted'));
+ const generate=el('button',msg('policyMerge.generate'));generate.type='submit';generate.disabled=true;f.append(generate);
+ const error=el('p',undefined,'field-error');error.setAttribute('role','alert');error.hidden=true;f.append(error);
+ const resultLabel=el('label',msg('policyMerge.result')),output=el('textarea');output.name='policy-result';output.readOnly=true;output.spellcheck=false;output.autocomplete='off';resultLabel.append(output);resultLabel.hidden=true;f.append(resultLabel);
+ const summary=el('p',undefined,'muted');summary.setAttribute('role','status');summary.hidden=true;f.append(summary);
+ const copy=el('button',msg('policyMerge.copy'));copy.type='button';copy.disabled=true;f.append(copy);
+ let mapSnapshot=null;
+ function invalidate(){output.value='';copy.disabled=true;resultLabel.hidden=summary.hidden=error.hidden=true;setText(summary,'');setText(error,'');source.removeAttribute('aria-invalid');f.dirty=!!source.value||omit.checked||!keep.checked;}
+ source.addEventListener('input',()=>{try{omit.checked=DerpPolicy.readPolicy(source.value).omitDefaultRegions;}catch{}invalidate();});
+ for(const input of [omit,keep]){input.addEventListener('input',invalidate);input.addEventListener('change',invalidate);}
+ f.addEventListener('submit',e=>{
+  e.preventDefault();invalidate();if(mapSnapshot===null)return;
+  try{const result=DerpPolicy.merge(source.value,JSON.parse(mapSnapshot),{omitDefaultRegions:omit.checked,keepCustom:keep.checked});output.value=result.text;setText(summary,msg('policyMerge.summary',result.summary.added,result.summary.retained,result.summary.identical,result.summary.renumbered));resultLabel.hidden=summary.hidden=false;copy.disabled=false;}
+  catch(e){const code=['empty','syntax','policy','structure','ambiguous','full','map'].includes(e.code)?e.code:'map';setText(error,msg('policyMerge.'+code));error.hidden=false;source.setAttribute('aria-invalid','true');source.focus();}
+ });
+ copy.addEventListener('click',async()=>{if(!output.value||copy.disabled)return;copy.disabled=true;try{await copyText(output.value);}finally{copy.disabled=!output.value;}});
+ return {setMap(value){const snapshot=value===null?null:JSON.stringify(value);if(snapshot!==mapSnapshot){mapSnapshot=snapshot;invalidate();}generate.disabled=mapSnapshot===null;}};
+}
 async function tailnets(){
   page(msg("nav.myTailnets"),msg("tailnets.connectATailnetUsingItsStableIDAndA"));
   await scopeSelector();
@@ -188,12 +211,12 @@ async function tailnets(){
     }));
     const instructions=el('ol');for(const text of [msg("tailnets.openAccessControlsInTheTailscaleAdminConsole"),msg("tailnets.mergeThisJSONIntoTheTopLevelDerpMapField"),msg("tailnets.checkForConflictingRegionIDsAndPreserveExistingRegions"),msg("tailnets.saveThePolicyThenCheckTheDERPConnectionWith")])instructions.append(el('li',text));
     const docs=el('a',msg("tailnets.tailscaleCustomDERPDocumentation"));docs.href='https://tailscale.com/docs/reference/derp-servers/custom-derp-servers';docs.target='_blank';docs.rel='noopener noreferrer';
-    const empty=el('div');mapPanel.append(mapMeta,mapControls,instructions,docs,empty);
+    const empty=el('div');mapPanel.append(mapMeta,mapControls,instructions,docs,empty);const mergeTool=policyMergeTool(mapPanel);
     mapPanel.id='tailnet-map-'+t.id;
     const controls=el('div',undefined,'resource-actions');
     const mapToggle=button(msg("tailnets.showDERPMap"),async()=>{
       if(!mapPanel.hidden){mapPanel.hidden=true;setText(mapToggle,msg("tailnets.showDERPMap"));mapToggle.setAttribute('aria-expanded','false');return;}
-      const result=await api('/tailnets/'+t.id+'/derpmap');mapOutput.value=JSON.stringify(result,null,2);const count=Object.values(result.Regions||{}).reduce((sum,r)=>sum+(r.Nodes?.length||0),0);setText(mapMeta,msg("tailnets.readAt",count,time(new Date().toISOString())));empty.replaceChildren();
+      mergeTool.setMap(null);const result=await api('/tailnets/'+t.id+'/derpmap');mergeTool.setMap(result);mapOutput.value=JSON.stringify(result,null,2);const count=Object.values(result.Regions||{}).reduce((sum,r)=>sum+(r.Nodes?.length||0),0);setText(mapMeta,msg("tailnets.readAt",count,time(new Date().toISOString())));empty.replaceChildren();
       if(!count){const related=grants.filter(g=>g.tailnet_id===t.id),waiting=related.some(g=>g.state==='requested'),confirming=related.some(g=>g.state==='owner_approved');empty.append(el('p',!t.enabled?msg("tailnets.thisTailnetIsPausedNoMapIsAvailable"):confirming?msg("tailnets.theProviderHasApprovedAccessConfirmToContinue"):waiting?msg("tailnets.awaitingProviderApproval"):msg("tailnets.noActiveGrantsCurrentlyHaveValidDevicePermissions"),'muted'));const link=el('a',confirming?msg("grants.confirmAccess"):waiting?msg("tailnets.viewRequest"):msg("tailnets.chooseANode"));link.href=confirming||waiting?'#grants':'#directory';empty.append(link);}
       mapPanel.hidden=false;setText(mapToggle,msg("tailnets.hideDERPMap"));mapToggle.setAttribute('aria-expanded','true');
     });

@@ -11,13 +11,15 @@ func TestManagementShellLoadsBeforeLoginWithoutOpeningAPIs(t *testing.T) {
 	s, _, _ := nodeTestStore(t)
 	h := NewHTTPHandler(s)
 	for path, contentType := range map[string]string{
-		"/manage/":                 "text/html",
-		"/manage/app.js":           "text/javascript",
-		"/manage/theme.js":         "text/javascript",
-		"/manage/i18n.js":          "text/javascript",
-		"/manage/locales/zh-CN.js": "text/javascript",
-		"/manage/locales/en.js":    "text/javascript",
-		"/manage/app.css":          "text/css",
+		"/manage/":                       "text/html",
+		"/manage/app.js":                 "text/javascript",
+		"/manage/theme.js":               "text/javascript",
+		"/manage/i18n.js":                "text/javascript",
+		"/manage/derp-policy.js":         "text/javascript",
+		"/manage/vendor/jsonc-parser.js": "text/javascript",
+		"/manage/locales/zh-CN.js":       "text/javascript",
+		"/manage/locales/en.js":          "text/javascript",
+		"/manage/app.css":                "text/css",
 	} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "https://controller.example.com"+path, nil))

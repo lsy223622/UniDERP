@@ -19,7 +19,7 @@ jobs:
       - name: Build and test patched derper
         run: go run ./scripts/build-derper -out "$RUNNER_TEMP/derper"
       - name: Test console languages
-        run: node --test scripts/test-ui-i18n.cjs
+        run: node --test scripts/test-ui-i18n.cjs scripts/test-derp-policy.cjs scripts/test-derp-policy-ui.cjs
       - run: go test ./...
         env:
           UNIDERP_TEST_DERPER: ${{ runner.temp }}/derper

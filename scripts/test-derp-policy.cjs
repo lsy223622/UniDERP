@@ -39,6 +39,9 @@ test('deduplicates same-ID semantic objects without rounding numeric extensions'
  const large='{"grants":[],"derpMap":{"Regions":{"900":'+JSON.stringify(r).replace('"RegionID":900','"Cost":9007199254740993,"RegionID":900')+'}}}';
  const different=map(900);different.Regions[900].Cost=9007199254740992;
  assert.equal(merge(large,different).summary.renumbered,1);
+ const wrongID=region(901);wrongID.RegionCode='uniderp-900';
+ const malformed=merge(JSON.stringify({grants:[],derpMap:{Regions:{900:wrongID}}}),map(900));
+ assert.equal(malformed.summary.added,1);assert.equal(malformed.summary.identical,0);
 });
 
 test('reserves incoming free IDs before allocating collisions, skips nulls, updates all node IDs and wraps',()=>{
