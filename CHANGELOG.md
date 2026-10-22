@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.1] - 2026-10-22
+
+- Adds a browser-local tool under each Tailnet's DERP map to merge current
+  UniDERP regions into a complete JSON/HuJSON Tailscale policy, preserving
+  unrelated policy text, comments and numeric literals.
+- Reads the original default-DERP preference, supports retaining or replacing
+  custom regions, preserves null exclusions and out-of-range overrides, and
+  allocates conflicting region IDs deterministically within 900–999.
+- Adds Chinese/English generation, summaries and complete-policy copying.
+  Source, option or map changes invalidate previous results; language changes
+  and map refreshes retain drafts. Policies remain in browser memory.
+- Bundles the MIT-licensed jsonc-parser locally and adds focused merge and
+  interface regressions. Publishes Linux/amd64 images as
+  ghcr.io/lsy223622/uniderp:2.2.1 and latest.
+
 ## [2.2.0] - 2026-10-14
 
 - Adds Standalone, Controller and Member instance modes, with three initial
