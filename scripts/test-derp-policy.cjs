@@ -78,6 +78,8 @@ test('target structure ambiguity and fragments are rejected without attempting p
  for(const source of ['{"derpMap":null}','{"derpMap":{"Regions":[]}}','{"derpMap":{"OmitDefaultRegions":1}}','{"derpMap":{"Regions":{"900":false}}}'])error(()=>read(source),'structure');
  for(const source of ['{"derpMap":{},"derpMap":{}}','{"DerpMap":{}}','{"derpMap":{},"DERPMAP":{}}','{"derpMap":{"Regions":{},"regions":{}}}','{"derpMap":{"Regions":{"900":null,"900":null}}}','{"derpMap":{"OmitDefaultRegions":false,"omitdefaultregions":true}}'])error(()=>read(source),'ambiguous');
  assert.ok(merge('{"futurePolicyKey": {"__proto__": "safe"}}',map(900)).text.includes('"__proto__": "safe"'));
+ const unknownTopLevel='{"grants":[], "Regions":{"future":9007199254740993}, "OmitDefaultRegions":"future policy field"}';
+ assert.ok(merge(unknownTopLevel,map(900)).text.startsWith(unknownTopLevel.slice(0,-1)));
  assert.equal(merge('{}',{Regions:{}}).summary.added,0);
 });
 

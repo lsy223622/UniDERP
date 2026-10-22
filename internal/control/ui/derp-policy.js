@@ -21,7 +21,8 @@ var DerpPolicy=(()=>{
  function readPolicy(text){
   if(!text.trim())fail('empty');
   const root=parse(text);if(root.type!=='object')fail('policy');
-  if(root.children.some(p=>['regions','omitdefaultregions'].includes(p.children[0].value.toLowerCase())))fail('policy');
+  const keys=root.children.map(p=>p.children[0].value.toLowerCase());
+  if(keys.some(k=>['regions','omitdefaultregions'].includes(k))&&keys.every(k=>['regions','omitdefaultregions','defaults'].includes(k)))fail('policy');
   const derp=property(root,'derpMap');if(derp&&derp.type!=='object')fail('structure');
   const regions=derp&&property(derp,'Regions'),omit=derp&&property(derp,'OmitDefaultRegions');
   if(omit&&omit.type!=='boolean')fail('structure');
