@@ -42,6 +42,9 @@ test('deduplicates same-ID semantic objects without rounding numeric extensions'
  const wrongID=region(901);wrongID.RegionCode='uniderp-900';
  const malformed=merge(JSON.stringify({grants:[],derpMap:{Regions:{900:wrongID}}}),map(900));
  assert.equal(malformed.summary.added,1);assert.equal(malformed.summary.identical,0);
+ const containers=map(900);containers.Regions[900].Extra=[];const old=region(900);old.Extra={};
+ const distinct=merge(JSON.stringify({grants:[],derpMap:{Regions:{900:old}}}),containers);
+ assert.equal(distinct.summary.identical,0);assert.equal(distinct.summary.renumbered,1);
 });
 
 test('reserves incoming free IDs before allocating collisions, skips nulls, updates all node IDs and wraps',()=>{

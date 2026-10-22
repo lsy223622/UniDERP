@@ -39,9 +39,9 @@ var DerpPolicy=(()=>{
     const name=p.children[0].value;if(names.has(name))fail('ambiguous');names.add(name);
     const id=normalizeIDs&&name==='RegionID'&&(path.length===0||(path.length===2&&path[0]==='Nodes'));
     return [name,id?'n0':semantic(p.children[1],text,normalizeIDs,[...path,name])];
-   });parts.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);return JSON.stringify(parts);
+   });parts.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);return 'o'+JSON.stringify(parts);
   }
-  if(node.type==='array')return '['+node.children.map((n,i)=>semantic(n,text,normalizeIDs,[...path,i])).join(',')+']';
+  if(node.type==='array')return 'a['+node.children.map((n,i)=>semantic(n,text,normalizeIDs,[...path,i])).join(',')+']';
   return node.type+JSON.stringify(node.value);
  }
  function apply(text,edits){for(const e of edits.map((e,index)=>({...e,index})).sort((a,b)=>b.offset-a.offset||b.index-a.index))text=text.slice(0,e.offset)+e.text+text.slice(e.offset+e.length);return text;}
