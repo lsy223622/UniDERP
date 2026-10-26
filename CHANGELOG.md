@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.2] - 2026-10-26
+
+- Updates the Go toolchain and pinned Docker builder to Go 1.27.3, including
+  the standard-library HTTP/2 and certificate verification security fixes.
+- Updates golang.org/x/net to v0.60.0 and golang.org/x/crypto to v0.57.0,
+  together with their required transitive dependencies.
+- Applies the root module's Go minimum and security dependency versions to
+  the independent patched Tailscale derper module, including prepared source
+  trees used by race checks. Retains the pinned upstream source and patch.
+- Publishes Linux/amd64 images as ghcr.io/lsy223622/uniderp:2.2.2 and latest.
+
 ## [2.2.1] - 2026-10-22
 
 - Adds a browser-local tool under each Tailnet's DERP map to merge current
