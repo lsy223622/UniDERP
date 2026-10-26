@@ -13,8 +13,8 @@ upstream:
 images:
   - name: build
     platform: linux/amd64
-    reference: golang:1.27.1
-    digest: sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
+    reference: golang:1.27.3
+    digest: sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc
   - name: runtime
     platform: linux/amd64
     reference: gcr.io/distroless/static-debian12:nonroot

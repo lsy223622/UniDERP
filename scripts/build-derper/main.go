@@ -48,6 +48,38 @@ func verifyApplied(dir string) error {
 	return nil
 }
 
+func prepareDependencies(root, work string) error {
+	read := func(args ...string) ([]byte, error) {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = root
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("read build dependencies: %w: %s", err, output)
+		}
+		return output, nil
+	}
+	version, err := read("list", "-m", "-f", "{{.GoVersion}}")
+	if err != nil {
+		return err
+	}
+	pins, err := read("list", "-m", "-f", "{{.Path}}@{{.Version}}", "golang.org/x/crypto", "golang.org/x/net")
+	if err != nil {
+		return err
+	}
+	// The copied upstream module does not inherit the root module's security updates.
+	for _, args := range [][]string{
+		{"mod", "edit", "-go=" + strings.TrimSpace(string(version))},
+		append([]string{"get"}, strings.Fields(string(pins))...),
+	} {
+		cmd := exec.Command("go", args...)
+		cmd.Dir, cmd.Stdout, cmd.Stderr = work, os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("prepare build dependencies: %w", err)
+		}
+	}
+	return nil
+}
+
 func main() {
 	if err := build(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -166,6 +198,9 @@ func build() error {
 	}
 	if !bytes.Equal(fixture, upstreamFixture) {
 		return errors.New("UniDERP wire fixture mismatch")
+	}
+	if err := prepareDependencies(root, work); err != nil {
+		return err
 	}
 	if *prepare != "" {
 		fmt.Println(work)

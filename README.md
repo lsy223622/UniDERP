@@ -22,7 +22,7 @@ Use the published image digest for immutable deployments. Source and CI are at [
 
 ## Build
 
-Use Go 1.27.1 and the pinned `tailscale.com v1.102.3`. Build both binaries; a stock `derper` does not implement the policy interface:
+Use Go 1.27.3 and the pinned `tailscale.com v1.102.3`. Build both binaries; a stock `derper` does not implement the policy interface:
 
 ```sh
 CGO_ENABLED=0 go build -trimpath -o uniderp ./cmd/uniderp
@@ -33,7 +33,7 @@ docker build --build-arg UNIDERP_VERSION=v2-local \
   --build-arg UNIDERP_COMMIT="$(git rev-parse HEAD)" -t uniderp:v2-local .
 ```
 
-The builder verifies the upstream version, commit and module checksum, verifies and applies [the patch](patches/tailscale/uniderp.patch), then tests the patched packages. [release-manifest.yaml](release-manifest.yaml) records the upstream commit, patch digest and base-image digests. `uniderp version` reports the product version, commit, upstream version and patch ID. Local builds without release metadata report development values.
+The builder verifies the upstream version, commit and module checksum, verifies and applies [the patch](patches/tailscale/uniderp.patch), then tests the patched packages. The prepared upstream module uses the root module's Go minimum version and selected `golang.org/x/crypto` and `golang.org/x/net` versions, including when using `-prepare`. [release-manifest.yaml](release-manifest.yaml) records the upstream commit, patch digest and base-image digests. `uniderp version` reports the product version, commit, upstream version and patch ID. Local builds without release metadata report development values.
 
 ## Deploy the controller
 

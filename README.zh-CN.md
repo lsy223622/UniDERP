@@ -22,7 +22,7 @@ docker run --rm --entrypoint /usr/local/bin/uniderp \
 
 ## 构建
 
-使用 Go 1.27.1 和固定的 `tailscale.com v1.102.3`。需要同时构建两个程序，原版 `derper` 不提供本项目的策略接口：
+使用 Go 1.27.3 和固定的 `tailscale.com v1.102.3`。需要同时构建两个程序，原版 `derper` 不提供本项目的策略接口：
 
 ```sh
 CGO_ENABLED=0 go build -trimpath -o uniderp ./cmd/uniderp
@@ -33,7 +33,7 @@ docker build --build-arg UNIDERP_VERSION=v2-local \
   --build-arg UNIDERP_COMMIT="$(git rev-parse HEAD)" -t uniderp:v2-local .
 ```
 
-构建器核对上游版本、commit 和 module checksum，验证并应用[补丁](patches/tailscale/uniderp.patch)，再运行 patched 包测试。[release-manifest.yaml](release-manifest.yaml) 记录上游 commit、补丁摘要和基础镜像摘要。`uniderp version` 显示产品版本、commit、上游版本和 patch ID；未传入发布元数据的本地构建显示开发值。
+构建器核对上游版本、commit 和 module checksum，验证并应用[补丁](patches/tailscale/uniderp.patch)，再运行 patched 包测试。准备后的上游模块使用根模块的 Go 最低版本及所选 `golang.org/x/crypto`、`golang.org/x/net` 版本，`-prepare` 模式也相同。[release-manifest.yaml](release-manifest.yaml) 记录上游 commit、补丁摘要和基础镜像摘要。`uniderp version` 显示产品版本、commit、上游版本和 patch ID；未传入发布元数据的本地构建显示开发值。
 
 ## 部署主控
 
