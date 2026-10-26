@@ -175,11 +175,11 @@ func TestWebJoinUsesProofAndRetriesPendingReceipt(t *testing.T) {
 	d.derper = &daemonFakeProcess{}
 	var challenge cluster.NodeChallenge
 	var attempts int
-	var offline bool
+	var offline atomic.Bool
 	var portWrites atomic.Int32
 	controlOpened := make(chan struct{}, 1)
 	controller := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if offline {
+		if offline.Load() {
 			w.WriteHeader(503)
 			return
 		}
@@ -280,7 +280,7 @@ func TestWebJoinUsesProofAndRetriesPendingReceipt(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		offline = isOffline
+		offline.Store(isOffline)
 		released, err := d.Leave(t.Context())
 		if err != nil || released == isOffline {
 			t.Fatal(released, err)
